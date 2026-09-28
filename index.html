@@ -136,17 +136,29 @@
 
       <div class="settings-group">
         <div class="settings-label">Seus dados</div>
+        <p class="storage-note" id="storageStatus">Verificando armazenamento…</p>
+        <button class="settings-row action" id="exportDbBtn">
+          <span class="ico">💾</span>
+          <span class="txt"><b>Baixar banco (.sqlite)</b><small>Arquivo do banco SQLite completo</small></span>
+          <span class="chev">›</span>
+        </button>
+        <label class="settings-row action" for="importDbFile">
+          <span class="ico">📥</span>
+          <span class="txt"><b>Restaurar banco (.sqlite)</b><small>Carrega um arquivo .sqlite salvo antes</small></span>
+          <span class="chev">›</span>
+        </label>
+        <input type="file" id="importDbFile" accept=".sqlite,.db,application/x-sqlite3" hidden>
         <button class="settings-row action" id="exportBtn">
           <span class="ico">⬇️</span>
-          <span class="txt"><b>Exportar backup</b><small>Salva um arquivo .json com tudo</small></span>
+          <span class="txt"><b>Exportar backup (.json)</b><small>Formato leve e legível, sempre funciona</small></span>
           <span class="chev">›</span>
         </button>
         <label class="settings-row action" for="importFile">
           <span class="ico">⬆️</span>
-          <span class="txt"><b>Importar backup</b><small>Restaura a partir de um arquivo</small></span>
+          <span class="txt"><b>Importar backup (.json)</b><small>Restaura a partir de um arquivo .json</small></span>
           <span class="chev">›</span>
         </label>
-        <input type="file" id="importFile" accept="application/json" hidden>
+        <input type="file" id="importFile" accept=".json,application/json" hidden>
         <button class="settings-row action danger" id="wipeBtn">
           <span class="ico">🗑️</span>
           <span class="txt"><b>Apagar tudo</b><small>Remove todas as compras cadastradas</small></span>
@@ -159,8 +171,8 @@
         <div class="about-card">
           <div class="about-ico">R$</div>
           <div>
-            <b>Parcelas</b>
-            <p>Controle simples e privado das suas compras parceladas. Todos os dados ficam somente neste dispositivo.</p>
+            <b>Financeiro</b>
+            <p>Controle simples e privado das suas compras parceladas. Seus dados ficam num banco SQLite somente neste dispositivo.</p>
           </div>
         </div>
       </div>
@@ -288,6 +300,7 @@
 
   <div class="toast" id="toast"></div>
 
+  <script src="https://cdn.jsdelivr.net/npm/sql.js@1.10.3/dist/sql-wasm.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

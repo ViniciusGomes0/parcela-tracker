@@ -49,7 +49,17 @@
     return CATEGORIES[CATEGORIES.length - 1];
   }
 
-  // ---- storage ----
+  // ---- storage: SQLite (sql.js) persisted in IndexedDB, with a localStorage mirror as fallback ----
+  var SQL = null;            // sql.js module
+  var db = null;             // sql.js Database instance
+  var dbReady = false;       // true once SQLite is the active store
+  var IDB_NAME = 'financeiro-db';
+  var IDB_STORE = 'kv';
+  var IDB_BINKEY = 'sqlite-file';
+  var SQLJS_BASE = 'https://cdn.jsdelivr.net/npm/sql.js@1.10.3/dist/';
+  var persistTimer = null;
+
+  // reads the localStorage mirror — used for migration and as an offline fallback
   function load() {
     try {
       var raw = localStorage.getItem(KEY);
@@ -73,16 +83,127 @@
     if (!e.paid) e.paid = e.paid || 0;
     return e;
   }
+
+  // ---- tiny IndexedDB key/value store (holds the SQLite binary) ----
+  function idbOpen() {
+    return new Promise(function (resolve, reject) {
+      var req = indexedDB.open(IDB_NAME, 1);
+      req.onupgradeneeded = function () { req.result.createObjectStore(IDB_STORE); };
+      req.onsuccess = function () { resolve(req.result); };
+      req.onerror = function () { reject(req.error); };
+    });
+  }
+  function idbGet(key) {
+    return idbOpen().then(function (dbi) {
+      return new Promise(function (resolve, reject) {
+        var rq = dbi.transaction(IDB_STORE, 'readonly').objectStore(IDB_STORE).get(key);
+        rq.onsuccess = function () { resolve(rq.result); };
+        rq.onerror = function () { reject(rq.error); };
+      });
+    });
+  }
+  function idbPut(key, val) {
+    return idbOpen().then(function (dbi) {
+      return new Promise(function (resolve, reject) {
+        var tx = dbi.transaction(IDB_STORE, 'readwrite');
+        tx.objectStore(IDB_STORE).put(val, key);
+        tx.oncomplete = function () { resolve(); };
+        tx.onerror = function () { reject(tx.error); };
+      });
+    });
+  }
+
+  // ---- SQLite table helpers ----
+  function ensureSchema() {
+    db.run('CREATE TABLE IF NOT EXISTS expenses (id TEXT PRIMARY KEY, pos INTEGER, json TEXT)');
+  }
+  function readStateFromDb() {
+    var out = [];
+    var res = db.exec('SELECT json FROM expenses ORDER BY pos ASC');
+    if (res.length && res[0].values) {
+      res[0].values.forEach(function (row) {
+        try { out.push(normalize(JSON.parse(row[0]))); } catch (e) {}
+      });
+    }
+    return out;
+  }
+  function writeStateToDb() {
+    db.run('BEGIN');
+    db.run('DELETE FROM expenses');
+    var stmt = db.prepare('INSERT INTO expenses (id, pos, json) VALUES (?, ?, ?)');
+    for (var i = 0; i < state.length; i++) {
+      stmt.run([String(state[i].id), i, JSON.stringify(state[i])]);
+    }
+    stmt.free();
+    db.run('COMMIT');
+  }
+  function schedulePersist() {
+    clearTimeout(persistTimer);
+    persistTimer = setTimeout(persistNow, 350);
+  }
+  function persistNow() {
+    if (!dbReady || !db) return;
+    try { idbPut(IDB_BINKEY, db.export()).catch(function () {}); } catch (e) {}
+  }
+
+  // Save: mirror to localStorage (instant + safe) + write to SQLite + persist the DB file
   function save() {
-    try {
-      localStorage.setItem(KEY, JSON.stringify(state));
-      return true;
-    } catch (e) {
-      return false;
+    var ok = false;
+    try { localStorage.setItem(KEY, JSON.stringify(state)); ok = true; } catch (e) {}
+    if (dbReady && db) {
+      try { writeStateToDb(); schedulePersist(); ok = true; } catch (e) {}
+    }
+    updateStorageStatus();
+    return ok;
+  }
+
+  function updateStorageStatus() {
+    var el = document.getElementById('storageStatus');
+    if (!el) return;
+    if (dbReady) {
+      el.textContent = '✅ Banco SQLite ativo — ' + state.length + ' compra(s) salvas com segurança neste dispositivo.';
+    } else {
+      el.textContent = '⚠️ SQLite indisponível agora (offline?). Seus dados estão salvos localmente; ao reabrir online o banco volta. Exporte um backup por segurança.';
     }
   }
 
-  var state = load();
+  // ---- boot the database: load sql.js, migrate localStorage → SQLite, or fall back ----
+  function initDB() {
+    try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (e) {}
+
+    if (typeof initSqlJs !== 'function') {
+      state = load();
+      dbReady = false;
+      return Promise.resolve();
+    }
+    return initSqlJs({ locateFile: function (f) { return SQLJS_BASE + f; } })
+      .then(function (mod) { SQL = mod; return idbGet(IDB_BINKEY); })
+      .then(function (bin) {
+        if (bin) {
+          db = new SQL.Database(new Uint8Array(bin));
+          ensureSchema();
+          dbReady = true;
+          state = readStateFromDb();
+          if (!state.length) {                 // empty DB but mirror has data → recover
+            var ls = load();
+            if (ls.length) { state = ls; writeStateToDb(); persistNow(); }
+          }
+        } else {
+          db = new SQL.Database();
+          ensureSchema();
+          dbReady = true;
+          state = load();                       // first run → migrate existing data in
+          writeStateToDb();
+          persistNow();
+        }
+      })
+      .catch(function () {                       // any failure → never lose data
+        state = load();
+        dbReady = false;
+      });
+  }
+
+  var state = [];
   var editingId = null;
   var confirmId = null;
   var currentFilter = 'all';
@@ -740,6 +861,51 @@
     reader.readAsText(file);
   });
 
+  // export the real SQLite database file
+  var exportDbBtn = document.getElementById('exportDbBtn');
+  if (exportDbBtn) exportDbBtn.onclick = function () {
+    if (!dbReady || !db) { showToast('Banco SQLite indisponível agora'); return; }
+    try {
+      var bin = db.export();
+      var blob = new Blob([bin], { type: 'application/x-sqlite3' });
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      var stamp = new Date().toISOString().slice(0, 10);
+      a.href = url;
+      a.download = 'financeiro-' + stamp + '.sqlite';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(function () { URL.revokeObjectURL(url); }, 2000);
+      showToast('Banco exportado');
+    } catch (e) { showToast('Falha ao exportar banco'); }
+  };
+
+  // restore from a SQLite database file
+  var importDbFile = document.getElementById('importDbFile');
+  if (importDbFile) importDbFile.addEventListener('change', function (ev) {
+    var file = ev.target.files && ev.target.files[0];
+    if (!file) return;
+    if (!SQL) { showToast('SQLite indisponível agora'); ev.target.value = ''; return; }
+    var reader = new FileReader();
+    reader.onload = function () {
+      try {
+        var incoming = new SQL.Database(new Uint8Array(reader.result));
+        incoming.run('CREATE TABLE IF NOT EXISTS expenses (id TEXT PRIMARY KEY, pos INTEGER, json TEXT)');
+        db = incoming;
+        dbReady = true;
+        state = readStateFromDb();
+        try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {}
+        persistNow();
+        renderAll();
+        updateStorageStatus();
+        showToast('Banco restaurado (' + state.length + ' compras)');
+      } catch (e) { showToast('Arquivo .sqlite inválido'); }
+      ev.target.value = '';
+    };
+    reader.readAsArrayBuffer(file);
+  });
+
   document.getElementById('wipeBtn').onclick = function () {
     if (!state.length) { showToast('Não há dados para apagar'); return; }
     if (confirm('Apagar todas as ' + state.length + ' compras cadastradas? Esta ação não pode ser desfeita.')) {
@@ -801,5 +967,14 @@
   })();
 
   renderCatGrid();
-  renderAll();
+  initDB().then(function () {
+    updateStorageStatus();
+    renderAll();
+  });
+
+  // persist the DB file when leaving/hiding, as a safety net for the debounced write
+  window.addEventListener('pagehide', persistNow);
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'hidden') persistNow();
+  });
 })();

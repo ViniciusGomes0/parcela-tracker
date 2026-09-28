@@ -336,6 +336,11 @@ header.top .sub { color: var(--text-3); font-size: 13px; margin-top: 6px; font-w
 /* Settings */
 .settings-group { margin-bottom: 22px; }
 .settings-label { font-size: 12px; font-weight: 700; color: var(--text-3); text-transform: uppercase; letter-spacing: .4px; margin: 0 6px 8px; }
+.storage-note {
+  font-size: 12.5px; line-height: 1.45; color: var(--text-2); font-weight: 500;
+  background: var(--surface-2); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 11px 13px; margin: 0 0 10px;
+}
 .seg {
   display: flex; background: var(--surface-2); border-radius: 14px; padding: 4px; gap: 4px;
   border: 1px solid var(--border);
