@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+<title>Parcelas</title>
+<meta name="description" content="Controle de parcelas e compras parceladas">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Parcelas">
+<meta name="theme-color" content="#0b0f14" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f5f6f8" media="(prefers-color-scheme: light)">
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect width='180' height='180' rx='40' fill='%235b8cff'/%3E%3Crect x='38' y='104' width='104' height='16' rx='8' fill='%23fff' opacity='.35'/%3E%3Crect x='38' y='104' width='64' height='16' rx='8' fill='%23fff'/%3E%3Ctext x='90' y='78' font-family='sans-serif' font-size='64' font-weight='700' fill='%23fff' text-anchor='middle'%3ER$%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="wrap">
+    <header class="top">
+      <div>
+        <h1>Minhas Parcelas</h1>
+        <div class="sub" id="today"></div>
+      </div>
+    </header>
+
+    <section class="dash" id="dash">
+      <div class="stat">
+        <div class="spark"></div>
+        <div class="label">Compromisso mensal</div>
+        <div class="value brand live" id="stMonthly">R$ 0,00</div>
+        <div class="meta" id="stMonthlyMeta">Nenhuma parcela ativa</div>
+      </div>
+      <div class="stat">
+        <div class="label">Dívida restante</div>
+        <div class="value danger live" id="stRemaining">R$ 0,00</div>
+        <div class="meta" id="stRemainingMeta">Tudo quitado</div>
+      </div>
+      <div class="stat wide">
+        <div class="label">Total parcelado</div>
+        <div class="value live" id="stTotal">R$ 0,00</div>
+        <div class="meta" id="stTotalMeta">Já pago: R$ 0,00</div>
+      </div>
+    </section>
+
+    <div class="section-head">
+      <h2>Compras</h2>
+      <span class="count" id="count">0</span>
+    </div>
+
+    <div class="cards" id="cards"></div>
+  </div>
+
+  <button class="fab" id="fab" aria-label="Adicionar compra">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>
+    Adicionar
+  </button>
+
+  <!-- Sheet -->
+  <div class="backdrop" id="backdrop">
+    <div class="sheet" id="sheet" role="dialog" aria-modal="true">
+      <div class="grip"></div>
+      <h2 id="sheetTitle">Nova compra</h2>
+      <div class="field">
+        <label for="fName">Nome da compra</label>
+        <input class="input" id="fName" type="text" inputmode="text" placeholder="Ex.: Notebook, Geladeira..." autocomplete="off">
+        <div class="hint err" id="eName" hidden>Informe um nome.</div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label for="fTotal">Valor total (R$)</label>
+          <input class="input" id="fTotal" type="text" inputmode="decimal" placeholder="0,00">
+          <div class="hint err" id="eTotal" hidden>Valor inválido.</div>
+        </div>
+        <div class="field">
+          <label for="fParc">Parcelas</label>
+          <input class="input" id="fParc" type="number" inputmode="numeric" min="1" max="360" placeholder="12">
+          <div class="hint err" id="eParc" hidden>Mín. 1.</div>
+        </div>
+      </div>
+      <div class="field">
+        <label for="fDate">Início (1ª parcela)</label>
+        <input class="input" id="fDate" type="month">
+        <div class="hint" id="hParc">Valor por parcela aparece aqui.</div>
+      </div>
+      <div class="sheet-actions">
+        <button class="btn" id="cancelBtn">Cancelar</button>
+        <button class="btn primary" id="saveBtn">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
