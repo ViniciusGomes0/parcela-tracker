@@ -1071,6 +1071,45 @@
     document.getElementById('today').textContent = s.charAt(0).toUpperCase() + s.slice(1);
   })();
 
+  // frase do dia — lista embutida (offline, sem depender de API), troca a cada dia
+  (function dailyQuote() {
+    var el = document.getElementById('dailyQuote');
+    if (!el) return;
+    var QUOTES = [
+      'Cuidar do dinheiro hoje é comprar tranquilidade para amanhã.',
+      'Cada parcela quitada é um passo a mais de liberdade.',
+      'Não é sobre ganhar muito, é sobre saber para onde vai cada real.',
+      'O orçamento não te prende — ele te mostra o caminho.',
+      'Pequenos cortes hoje viram grandes conquistas depois.',
+      'Quem controla as parcelas controla o próprio futuro.',
+      'Dívida planejada é ferramenta; dívida esquecida é armadilha.',
+      'O melhor investimento é o gasto que você evitou por consciência.',
+      'Saber quanto sobra é o primeiro passo para fazer sobrar mais.',
+      'Riqueza é gastar menos do que se ganha, com constância.',
+      'Antes de comprar, pergunte: cabe no que sobra?',
+      'Organização financeira é liberdade disfarçada de planilha.',
+      'Um real guardado hoje trabalha por você amanhã.',
+      'O futuro agradece cada decisão consciente do presente.',
+      'Não compare seu bolso com o dos outros — compare com o seu de ontem.',
+      'Metas claras transformam sonhos em contas pagas.',
+      'Gastar bem é uma habilidade; e habilidade se treina.',
+      'A paz financeira começa quando os números param de ser surpresa.',
+      'Cada mês fechado no azul é uma vitória silenciosa.',
+      'Controle é liberdade: você decide, não o boleto.',
+      'O dinheiro rende mais quando tem um destino definido.',
+      'Consistência vence intensidade quando o assunto é finança.',
+      'Quitar é bom; não precisar parcelar é ainda melhor.',
+      'Você não precisa de mais dinheiro, precisa de mais clareza.',
+      'Todo grande objetivo cabe em pequenas economias diárias.',
+      'O segredo não é o quanto entra, é o quanto fica.',
+      'Anotar o gasto tira o poder que ele tinha sobre você.',
+      'Disciplina de hoje é o conforto que você vai sentir amanhã.'
+    ];
+    var d = new Date();
+    var dayNum = Math.floor(new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime() / 86400000);
+    el.textContent = QUOTES[((dayNum % QUOTES.length) + QUOTES.length) % QUOTES.length];
+  })();
+
   // ---- campo de salário ----
   (function setupSalary() {
     var input = document.getElementById('salaryInput');

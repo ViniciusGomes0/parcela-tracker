@@ -114,6 +114,14 @@ header.top h1 {
   line-height: 1;
 }
 header.top .sub { color: var(--text-3); font-size: 13px; margin-top: 6px; font-weight: 500; }
+.daily-quote {
+  margin: 0 2px 18px; padding: 12px 15px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-left: 3px solid var(--brand); border-radius: 14px;
+  font-size: 13.5px; line-height: 1.45; color: var(--text-2);
+  font-style: italic; box-shadow: var(--shadow);
+}
+.daily-quote:empty { display: none; }
 .avatar-btn {
   width: 42px; height: 42px; border-radius: 14px; background: var(--surface);
   border: 1px solid var(--border); box-shadow: var(--shadow); font-size: 18px;
