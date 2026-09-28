@@ -597,8 +597,6 @@
     var today = new Date();
     var isCurrentMonth = today.getFullYear() === y && today.getMonth() === m;
 
-    for (var i = 0; i < first; i++) grid.appendChild(el('div', 'cal-day empty'));
-
     for (var day = 1; day <= dim; day++) {
       var dayOcc = occ.filter(function (o) {
         var dd = Math.min(o.e.dueDay || 5, dim);
@@ -611,6 +609,8 @@
         if (dayOcc.every(function (o) { return o.paid; })) cls += ' paidoff-day';
       }
       var cell = el('div', cls);
+      // dia 1 vai direto para a coluna do seu dia da semana (sem células vazias no grid)
+      if (day === 1 && first > 0) cell.style.gridColumnStart = first + 1;
       cell.appendChild(el('span', null, String(day)));
       if (dayOcc.length) cell.appendChild(el('div', 'dot'));
       if (dayOcc.length) {

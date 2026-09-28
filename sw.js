@@ -1,5 +1,5 @@
 'use strict';
-var CACHE = 'parcelas-v5';
+var CACHE = 'parcelas-v6';
 var ASSETS = ['./', './index.html', './styles.css', './app.js', './manifest.webmanifest'];
 
 self.addEventListener('install', function (ev) {
