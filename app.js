@@ -3,6 +3,7 @@
 
   var KEY = 'parcela-tracker:v2';
   var KEY_OLD = 'parcela-tracker:v1';
+  var REV_KEY = 'parcela-tracker:v2:rev';   // "quando" o dado local foi salvo pela última vez
   var THEME_KEY = 'parcela-tracker:theme';
   var CUSTOM_CAT_KEY = 'parcela-tracker:customCategories';
   var fmtBRL = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -84,6 +85,16 @@
     return e;
   }
 
+  // "rev" = carimbo de tempo da última gravação. Serve para decidir, na abertura,
+  // qual cópia (localStorage ou SQLite) é a MAIS RECENTE e nunca deixar o banco
+  // antigo sobrescrever uma edição mais nova (evita o "reset").
+  function readLsRev() {
+    try { return parseInt(localStorage.getItem(REV_KEY), 10) || 0; } catch (e) { return 0; }
+  }
+  function writeLsRev(rev) {
+    try { localStorage.setItem(REV_KEY, String(rev)); } catch (e) {}
+  }
+
   // ---- tiny IndexedDB key/value store (holds the SQLite binary) ----
   function idbOpen() {
     return new Promise(function (resolve, reject) {
@@ -116,6 +127,19 @@
   // ---- SQLite table helpers ----
   function ensureSchema() {
     db.run('CREATE TABLE IF NOT EXISTS expenses (id TEXT PRIMARY KEY, pos INTEGER, json TEXT)');
+    db.run('CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT)');
+  }
+  function readDbRev() {
+    try {
+      var res = db.exec("SELECT v FROM meta WHERE k='rev'");
+      if (res.length && res[0].values && res[0].values.length) {
+        return parseInt(res[0].values[0][0], 10) || 0;
+      }
+    } catch (e) {}
+    return 0;
+  }
+  function writeDbRev(rev) {
+    try { db.run("INSERT OR REPLACE INTO meta (k, v) VALUES ('rev', ?)", [String(rev)]); } catch (e) {}
   }
   function readStateFromDb() {
     var out = [];
@@ -127,7 +151,7 @@
     }
     return out;
   }
-  function writeStateToDb() {
+  function writeStateToDb(rev) {
     db.run('BEGIN');
     db.run('DELETE FROM expenses');
     var stmt = db.prepare('INSERT INTO expenses (id, pos, json) VALUES (?, ?, ?)');
@@ -135,6 +159,7 @@
       stmt.run([String(state[i].id), i, JSON.stringify(state[i])]);
     }
     stmt.free();
+    if (rev != null) writeDbRev(rev);
     db.run('COMMIT');
   }
   function schedulePersist() {
@@ -146,12 +171,19 @@
     try { idbPut(IDB_BINKEY, db.export()).catch(function () {}); } catch (e) {}
   }
 
-  // Save: mirror to localStorage (instant + safe) + write to SQLite + persist the DB file
+  // Save: mirror to localStorage (instant + safe) + write to SQLite + persist the DB file.
+  // Um único "rev" (agora) é gravado nos dois lugares para que a próxima abertura
+  // saiba qual cópia é a mais recente.
   function save() {
     var ok = false;
-    try { localStorage.setItem(KEY, JSON.stringify(state)); ok = true; } catch (e) {}
+    var rev = Date.now();
+    try {
+      localStorage.setItem(KEY, JSON.stringify(state));
+      writeLsRev(rev);
+      ok = true;
+    } catch (e) {}
     if (dbReady && db) {
-      try { writeStateToDb(); schedulePersist(); ok = true; } catch (e) {}
+      try { writeStateToDb(rev); schedulePersist(); ok = true; } catch (e) {}
     }
     updateStorageStatus();
     return ok;
@@ -183,17 +215,37 @@
           db = new SQL.Database(new Uint8Array(bin));
           ensureSchema();
           dbReady = true;
-          state = readStateFromDb();
-          if (!state.length) {                 // empty DB but mirror has data → recover
-            var ls = load();
-            if (ls.length) { state = ls; writeStateToDb(); persistNow(); }
+
+          // Reconciliação por revisão: escolhe a cópia MAIS RECENTE entre o banco
+          // SQLite e o espelho no localStorage. Assim uma edição feita enquanto o
+          // banco estava indisponível (offline/CDN) nunca é apagada por um banco
+          // mais antigo — a causa do "reset" anterior.
+          var dbState = readStateFromDb();
+          var dbRev = readDbRev();
+          var lsState = load();
+          var lsRev = readLsRev();
+
+          if (lsRev > dbRev) {
+            // localStorage é mais novo → ele manda; sincroniza o banco.
+            state = lsState;
+            writeStateToDb(lsRev);
+            persistNow();
+          } else if (dbRev > lsRev) {
+            // banco é mais novo → ele manda; sincroniza o localStorage.
+            state = dbState;
+            try { localStorage.setItem(KEY, JSON.stringify(state)); writeLsRev(dbRev); } catch (e) {}
+          } else {
+            // mesma revisão (ou ambos sem rev, ex.: dados antigos) → usa o que tiver dados,
+            // preferindo o banco quando os dois têm.
+            state = dbState.length ? dbState : lsState;
+            if (!dbState.length && lsState.length) { writeStateToDb(lsRev || Date.now()); persistNow(); }
           }
         } else {
           db = new SQL.Database();
           ensureSchema();
           dbReady = true;
           state = load();                       // first run → migrate existing data in
-          writeStateToDb();
+          writeStateToDb(readLsRev() || Date.now());
           persistNow();
         }
       })
@@ -892,10 +944,13 @@
       try {
         var incoming = new SQL.Database(new Uint8Array(reader.result));
         incoming.run('CREATE TABLE IF NOT EXISTS expenses (id TEXT PRIMARY KEY, pos INTEGER, json TEXT)');
+        incoming.run('CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT)');
         db = incoming;
         dbReady = true;
         state = readStateFromDb();
-        try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) {}
+        var rev = Date.now();                 // restauração é a versão mais recente
+        writeDbRev(rev);
+        try { localStorage.setItem(KEY, JSON.stringify(state)); writeLsRev(rev); } catch (e) {}
         persistNow();
         renderAll();
         updateStorageStatus();
