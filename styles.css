@@ -27,44 +27,44 @@
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #0b0f14;
-    --bg-grad: radial-gradient(1200px 600px at 100% -10%, #14203a 0%, transparent 55%), var(--bg);
-    --surface: #141a23;
-    --surface-2: #1b222d;
-    --surface-3: #232c39;
-    --border: #262e3a;
-    --text: #eef2f8;
-    --text-2: #a3aec0;
-    --text-3: #6b7686;
+    --bg: #000000;
+    --bg-grad: radial-gradient(1200px 600px at 100% -10%, #141416 0%, transparent 55%), var(--bg);
+    --surface: #0f0f11;
+    --surface-2: #18181b;
+    --surface-3: #242428;
+    --border: #232327;
+    --text: #f4f5f7;
+    --text-2: #a6a8b0;
+    --text-3: #6c6e77;
     --brand: #5b8cff;
     --brand-2: #7aa5ff;
     --accent: #2dd4a0;
     --danger: #ff6369;
-    --danger-bg: #2a171a;
-    --track: #232b37;
-    --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 30px rgba(0,0,0,.35);
-    --shadow-lg: 0 12px 48px rgba(0,0,0,.55);
+    --danger-bg: #241416;
+    --track: #232327;
+    --shadow: 0 1px 2px rgba(0,0,0,.5), 0 8px 30px rgba(0,0,0,.5);
+    --shadow-lg: 0 12px 48px rgba(0,0,0,.7);
     color-scheme: dark;
   }
 }
 :root[data-theme="dark"] {
-  --bg: #0b0f14;
-  --bg-grad: radial-gradient(1200px 600px at 100% -10%, #14203a 0%, transparent 55%), var(--bg);
-  --surface: #141a23;
-  --surface-2: #1b222d;
-  --surface-3: #232c39;
-  --border: #262e3a;
-  --text: #eef2f8;
-  --text-2: #a3aec0;
-  --text-3: #6b7686;
+  --bg: #000000;
+  --bg-grad: radial-gradient(1200px 600px at 100% -10%, #141416 0%, transparent 55%), var(--bg);
+  --surface: #0f0f11;
+  --surface-2: #18181b;
+  --surface-3: #242428;
+  --border: #232327;
+  --text: #f4f5f7;
+  --text-2: #a6a8b0;
+  --text-3: #6c6e77;
   --brand: #5b8cff;
   --brand-2: #7aa5ff;
   --accent: #2dd4a0;
   --danger: #ff6369;
-  --danger-bg: #2a171a;
-  --track: #232b37;
-  --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 30px rgba(0,0,0,.35);
-  --shadow-lg: 0 12px 48px rgba(0,0,0,.55);
+  --danger-bg: #241416;
+  --track: #232327;
+  --shadow: 0 1px 2px rgba(0,0,0,.5), 0 8px 30px rgba(0,0,0,.5);
+  --shadow-lg: 0 12px 48px rgba(0,0,0,.7);
   color-scheme: dark;
 }
 
