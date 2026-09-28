@@ -140,6 +140,19 @@ header.top .sub { color: var(--text-3); font-size: 13px; margin-top: 6px; font-w
 .stat .label { font-size: 12px; color: var(--text-2); font-weight: 600; letter-spacing: .2px; text-transform: uppercase; }
 .stat .value { font-size: 24px; font-weight: 800; margin-top: 8px; letter-spacing: -.5px; }
 .stat .value.danger { color: var(--danger); }
+.stat .value.ok { color: var(--accent); }
+.salary-box {
+  display: flex; align-items: center; gap: 10px;
+  margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--border);
+}
+.salary-prefix { font-size: 12px; color: var(--text-3); font-weight: 600; white-space: nowrap; }
+.salary-input {
+  flex: 1; min-width: 0; height: 40px; border-radius: 12px;
+  border: 1px solid var(--border); background: var(--surface-2);
+  color: var(--text); padding: 0 12px; font-weight: 700; font-size: 15px;
+  text-align: right; -webkit-appearance: none; appearance: none;
+}
+.salary-input:focus { outline: none; border-color: var(--brand); background: var(--surface); }
 .stat.brandcard .value { color: var(--brand); }
 .stat .meta { font-size: 12px; color: var(--text-3); margin-top: 4px; }
 .stat .spark {

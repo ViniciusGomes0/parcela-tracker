@@ -6,6 +6,7 @@
   var REV_KEY = 'parcela-tracker:v2:rev';   // "quando" o dado local foi salvo pela última vez
   var THEME_KEY = 'parcela-tracker:theme';
   var CUSTOM_CAT_KEY = 'parcela-tracker:customCategories';
+  var SALARY_KEY = 'parcela-tracker:salary';   // salário mensal — por aparelho
   var fmtBRL = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
   var monthNames = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
   var monthNamesFull = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
@@ -316,6 +317,42 @@
     };
   }
 
+  // ---- salário (guardado por aparelho, como o tema) ----
+  function getSalary() {
+    try { var v = parseFloat(localStorage.getItem(SALARY_KEY)); return isNaN(v) ? 0 : v; }
+    catch (e) { return 0; }
+  }
+  function setSalary(v) {
+    try {
+      if (v > 0) localStorage.setItem(SALARY_KEY, String(v));
+      else localStorage.removeItem(SALARY_KEY);
+    } catch (e) {}
+  }
+
+  // atualiza só o card "Sobra do salário" (salário − compromisso mensal)
+  function renderSalary(monthly) {
+    var salary = getSalary();
+    var leftEl = document.getElementById('stLeft');
+    var metaEl = document.getElementById('stLeftMeta');
+    if (!leftEl || !metaEl) return;
+
+    if (salary <= 0) {
+      leftEl.textContent = '—';
+      leftEl.className = 'value live';
+      metaEl.textContent = 'Informe seu salário para ver o quanto sobra';
+      return;
+    }
+    var left = salary - monthly;
+    leftEl.textContent = fmtBRL.format(left);
+    leftEl.className = 'value live ' + (left < 0 ? 'danger' : 'ok');
+    var pct = Math.round((monthly / salary) * 100);
+    if (left < 0) {
+      metaEl.textContent = 'Passou ' + fmtBRL.format(-left) + ' do salário (' + pct + '% comprometido)';
+    } else {
+      metaEl.textContent = 'de ' + fmtBRL.format(salary) + ' · ' + pct + '% comprometido';
+    }
+  }
+
   // ---- dashboard ----
   function renderDash() {
     var monthly = 0, remaining = 0, total = 0, paidSum = 0, active = 0;
@@ -334,6 +371,7 @@
       remaining > 0 ? 'a pagar' : 'Tudo quitado 🎉';
     document.getElementById('stTotal').textContent = fmtBRL.format(total);
     document.getElementById('stTotalMeta').textContent = 'Já pago: ' + fmtBRL.format(paidSum);
+    renderSalary(monthly);
   }
 
   // ---- cards ----
@@ -1031,6 +1069,25 @@
     var d = new Date();
     var s = d.toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' });
     document.getElementById('today').textContent = s.charAt(0).toUpperCase() + s.slice(1);
+  })();
+
+  // ---- campo de salário ----
+  (function setupSalary() {
+    var input = document.getElementById('salaryInput');
+    if (!input) return;
+    var saved = getSalary();
+    if (saved > 0) input.value = fmtBRL.format(saved);
+    // enquanto digita: interpreta, salva e atualiza a "sobra" ao vivo (sem reformatar)
+    input.addEventListener('input', function () {
+      var v = parseAmount(input.value);
+      setSalary(isNaN(v) ? 0 : v);
+      renderDash();
+    });
+    // ao sair do campo: formata bonitinho (ou limpa se vazio)
+    input.addEventListener('blur', function () {
+      var v = getSalary();
+      input.value = v > 0 ? fmtBRL.format(v) : '';
+    });
   })();
 
   renderCatGrid();
