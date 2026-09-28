@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <rect width="100" height="100" rx="24" fill="#0b0b0f"/>
+  <!-- coin dropping in -->
+  <circle cx="49" cy="20" r="9" fill="#ffce54"/>
+  <text x="49" y="24.5" font-family="Arial, Helvetica, sans-serif" font-size="10" font-weight="700" text-anchor="middle" fill="#0b0b0f">$</text>
+  <g fill="#ffffff">
+    <!-- ear -->
+    <path d="M57 31 l11 -6 -1 14 z"/>
+    <!-- body -->
+    <ellipse cx="47" cy="58" rx="29" ry="21"/>
+    <!-- snout -->
+    <ellipse cx="74" cy="60" rx="11" ry="13"/>
+    <!-- legs -->
+    <rect x="30" y="74" width="9" height="12" rx="3"/>
+    <rect x="55" y="74" width="9" height="12" rx="3"/>
+  </g>
+  <!-- tail -->
+  <path d="M18 54 q-8 -3 -6 5 q1 5 6 2.5" fill="none" stroke="#ffffff" stroke-width="4" stroke-linecap="round"/>
+  <!-- coin slot -->
+  <rect x="40" y="36" width="18" height="4" rx="2" fill="#0b0b0f"/>
+  <!-- eye -->
+  <circle cx="60" cy="52" r="2.6" fill="#0b0b0f"/>
+  <!-- nostrils -->
+  <circle cx="71" cy="60" r="2.2" fill="#0b0b0f"/>
+  <circle cx="78" cy="60" r="2.2" fill="#0b0b0f"/>
+</svg>
