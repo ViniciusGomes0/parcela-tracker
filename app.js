@@ -83,6 +83,8 @@
     if (!e.category) e.category = 'other';
     if (!e.dueDay) e.dueDay = 5;
     if (!e.paid) e.paid = e.paid || 0;
+    e.fixed = !!e.fixed;                 // gasto fixo mensal (repete todo mês)
+    if (e.fixed && (!e.installments || e.installments < 1)) e.installments = 1;
     return e;
   }
 
@@ -304,6 +306,13 @@
 
   // ---- derived per expense ----
   function derive(e) {
+    if (e.fixed) {
+      // gasto fixo: o valor é o mensal; não há parcelas, dívida nem progresso
+      return {
+        per: e.total, paid: 0, remaining: 0, pct: 0,
+        done: false, canPay: false, nextIdx: 0, fixed: true
+      };
+    }
     var per = e.total / e.installments;
     var paid = e.paid || 0;
     var remaining = Math.max(0, e.total - per * paid);
@@ -358,6 +367,11 @@
     var monthly = 0, remaining = 0, total = 0, paidSum = 0, active = 0;
     state.forEach(function (e) {
       var d = derive(e);
+      if (e.fixed) {
+        // gasto fixo: soma no compromisso do mês, mas não é dívida/total parcelado
+        monthly += d.per; active++;
+        return;
+      }
       total += e.total;
       remaining += d.remaining;
       paidSum += d.per * d.paid;
@@ -382,7 +396,70 @@
     return n;
   }
 
+  // botões editar/excluir (+ confirmação) reutilizados pelos dois tipos de card
+  function appendCardActions(card, e, extraBtns) {
+    var acts = el('div', 'card-actions');
+    if (extraBtns) extraBtns.forEach(function (b) { acts.appendChild(b); });
+
+    var editBtn = el('button', 'btn icon');
+    editBtn.setAttribute('aria-label', 'Editar');
+    editBtn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>';
+    editBtn.onclick = function () { openEdit(e.id); };
+    acts.appendChild(editBtn);
+
+    var delBtn = el('button', 'btn icon danger');
+    delBtn.setAttribute('aria-label', 'Excluir');
+    delBtn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>';
+    delBtn.onclick = function () { confirmId = e.id; renderAll(); };
+    acts.appendChild(delBtn);
+
+    card.appendChild(acts);
+
+    if (confirmId === e.id) {
+      var cf = el('div', 'confirm');
+      cf.innerHTML = '<p>Excluir "' + escapeHtml(e.name) + '"? Esta ação não pode ser desfeita.</p>';
+      var row = el('div', 'row');
+      var no = el('button', 'btn', 'Cancelar');
+      no.onclick = function () { confirmId = null; renderAll(); };
+      var yes = el('button', 'btn yes', 'Excluir');
+      yes.onclick = function () { removeExpense(e.id); };
+      row.appendChild(no); row.appendChild(yes);
+      cf.appendChild(row);
+      card.appendChild(cf);
+    }
+  }
+
+  // card do gasto fixo: sem barra de progresso nem "pagar parcela"
+  function buildFixedCard(e) {
+    var cat = catById(e.category);
+    var card = el('div', 'card fixed-card');
+    card.style.setProperty('--cat-color', cat.color);
+
+    var top = el('div', 'card-top');
+    var left = el('div', 'card-name-row');
+    left.appendChild(el('div', 'card-cat-ico', escapeHtml(cat.icon)));
+    var nameWrap = el('div');
+    nameWrap.appendChild(el('div', 'card-name', escapeHtml(e.name)));
+    left.appendChild(nameWrap);
+    top.appendChild(left);
+    top.appendChild(el('div', 'badge fixed-badge', '↻ Todo mês'));
+    card.appendChild(top);
+
+    card.appendChild(el('div', 'card-total',
+      '<b>' + fmtBRL.format(e.total) + '</b> por mês · vence dia ' + (e.dueDay || 5)));
+
+    var g = el('div', 'grid3');
+    g.appendChild(mini('Por mês', fmtBRL.format(e.total)));
+    g.appendChild(mini('Vencimento', 'dia ' + (e.dueDay || 5)));
+    g.appendChild(mini('Desde', ymLabel(e.start)));
+    card.appendChild(g);
+
+    appendCardActions(card, e, null);
+    return card;
+  }
+
   function buildCard(e) {
+    if (e.fixed) return buildFixedCard(e);
     var d = derive(e);
     var cat = catById(e.category);
     var card = el('div', 'card' + (d.done ? ' done' : ''));
@@ -569,6 +646,10 @@
     var out = [];
     state.forEach(function (e) {
       var idx = monthDiffTo(e.start, y, m);
+      if (e.fixed) {
+        if (idx >= 0) out.push({ e: e, idx: idx, paid: false });
+        return;
+      }
       if (idx >= 0 && idx < e.installments) {
         out.push({ e: e, idx: idx, paid: idx < (e.paid || 0) });
       }
@@ -583,7 +664,7 @@
     var occ = monthOccurrences(y, m);
     var totalDue = 0, paidCount = 0;
     occ.forEach(function (o) {
-      var per = o.e.total / o.e.installments;
+      var per = o.e.fixed ? o.e.total : o.e.total / o.e.installments;
       if (!o.paid) totalDue += per;
       else paidCount++;
     });
@@ -675,6 +756,35 @@
   var fTotalLabel = document.getElementById('fTotalLabel');
   var amountModeSeg = document.getElementById('amountModeSeg');
   var amountMode = 'per'; // 'per' = valor da parcela, 'total' = valor total
+
+  // ---- gasto fixo mensal ----
+  var fFixed = document.getElementById('fFixed');
+  var amountModeField = document.getElementById('amountModeField');
+  var parcField = document.getElementById('parcField');
+  var fDateLabel = document.getElementById('fDateLabel');
+  var fixedMode = false;
+
+  function setFixedMode(on) {
+    fixedMode = !!on;
+    fFixed.checked = fixedMode;
+    fFixed.closest('.fixed-toggle').classList.toggle('on', fixedMode);
+    // esconde parcelas e o modo de valor (não fazem sentido pra gasto fixo)
+    amountModeField.hidden = fixedMode;
+    parcField.hidden = fixedMode;
+    if (fixedMode) {
+      amountMode = 'per';
+      fTotalLabel.textContent = 'Valor mensal (R$)';
+      fDateLabel.textContent = 'A partir de (mês)';
+    } else {
+      fTotalLabel.textContent = amountMode === 'per' ? 'Valor da parcela (R$)' : 'Valor total (R$)';
+      fDateLabel.textContent = 'Início (1ª parcela)';
+    }
+    updateHint();
+  }
+  fFixed.closest('.fixed-toggle').addEventListener('click', function (ev) {
+    ev.preventDefault();
+    setFixedMode(!fixedMode);
+  });
 
   amountModeSeg.querySelectorAll('.seg-btn').forEach(function (b) {
     b.onclick = function () { setAmountMode(b.dataset.mode); };
@@ -808,6 +918,7 @@
     fDay.value = 5;
     selectCategory('shopping');
     setAmountMode('per');
+    setFixedMode(false);
     clearErrors();
     updateHint();
     openSheet();
@@ -822,13 +933,14 @@
     document.getElementById('sheetTitle').textContent = 'Editar compra';
     document.getElementById('saveBtn').textContent = 'Salvar alterações';
     fName.value = e.name;
-    var perValue = e.total / e.installments;
+    var perValue = e.fixed ? e.total : e.total / e.installments;
     fTotal.value = perValue.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-    fParc.value = e.installments;
+    fParc.value = e.fixed ? '' : e.installments;
     fDate.value = e.start;
     fDay.value = e.dueDay || 5;
     selectCategory(e.category || 'other');
     setAmountMode('per');
+    setFixedMode(!!e.fixed);
     clearErrors();
     updateHint();
     openSheet();
@@ -836,6 +948,16 @@
 
   function updateHint() {
     var amount = parseAmount(fTotal.value);
+    if (fixedMode) {
+      if (!isNaN(amount) && amount > 0) {
+        hParc.textContent = 'Todo mês: ' + fmtBRL.format(amount);
+        hParc.style.color = 'var(--brand)';
+      } else {
+        hParc.textContent = 'Este valor será cobrado todo mês.';
+        hParc.style.color = '';
+      }
+      return;
+    }
     var parc = parseInt(fParc.value, 10);
     if (!isNaN(amount) && amount > 0 && parc >= 1) {
       if (amountMode === 'per') {
@@ -863,8 +985,31 @@
 
     if (!name) { document.getElementById('eName').hidden = false; fName.classList.add('err'); ok = false; }
     if (isNaN(amount) || amount <= 0) { document.getElementById('eTotal').hidden = false; fTotal.classList.add('err'); ok = false; }
-    if (isNaN(parc) || parc < 1) { document.getElementById('eParc').hidden = false; fParc.classList.add('err'); ok = false; }
+    if (!fixedMode && (isNaN(parc) || parc < 1)) { document.getElementById('eParc').hidden = false; fParc.classList.add('err'); ok = false; }
     if (!ok) return;
+
+    if (fixedMode) {
+      // gasto fixo: 1 valor mensal, sem parcelas
+      var totalF = Math.round(amount * 100) / 100;
+      if (editingId) {
+        var ef = find(editingId);
+        if (ef) {
+          ef.name = name; ef.total = totalF; ef.installments = 1;
+          ef.start = start; ef.dueDay = dueDay; ef.category = selectedCategory;
+          ef.fixed = true; ef.paid = 0;
+        }
+      } else {
+        state.unshift({
+          id: uid(), name: name, total: totalF, installments: 1, start: start,
+          dueDay: dueDay, category: selectedCategory, paid: 0, fixed: true
+        });
+      }
+      save();
+      closeSheet();
+      renderAll();
+      showToast(editingId ? 'Alterações salvas' : 'Gasto fixo adicionado');
+      return;
+    }
 
     if (parc > 360) parc = 360;
 
@@ -879,12 +1024,13 @@
         e.start = start;
         e.dueDay = dueDay;
         e.category = selectedCategory;
+        e.fixed = false;
         if ((e.paid || 0) > parc) e.paid = parc;
       }
     } else {
       state.unshift({
         id: uid(), name: name, total: total, installments: parc, start: start,
-        dueDay: dueDay, category: selectedCategory, paid: 0
+        dueDay: dueDay, category: selectedCategory, paid: 0, fixed: false
       });
     }
     save();

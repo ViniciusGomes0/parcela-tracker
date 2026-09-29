@@ -228,6 +228,17 @@
       </div>
 
       <div class="field">
+        <label class="fixed-toggle">
+          <span class="fixed-toggle-txt">
+            <b>Gasto fixo mensal</b>
+            <small>Repete todo mês sozinho (academia, cabelo, assinaturas...)</small>
+          </span>
+          <input type="checkbox" id="fFixed" hidden>
+          <span class="fixed-switch"><span class="fixed-knob"></span></span>
+        </label>
+      </div>
+
+      <div class="field" id="amountModeField">
         <label>Como prefere informar o valor?</label>
         <div class="seg" id="amountModeSeg">
           <button class="seg-btn active" type="button" data-mode="per">Valor da parcela</button>
@@ -241,7 +252,7 @@
           <input class="input" id="fTotal" type="text" inputmode="decimal" placeholder="0,00">
           <div class="hint err" id="eTotal" hidden>Valor inválido.</div>
         </div>
-        <div class="field">
+        <div class="field" id="parcField">
           <label for="fParc">Parcelas</label>
           <input class="input" id="fParc" type="number" inputmode="numeric" min="1" max="360" placeholder="12">
           <div class="hint err" id="eParc" hidden>Mín. 1.</div>
@@ -250,7 +261,7 @@
 
       <div class="field-row">
         <div class="field">
-          <label for="fDate">Início (1ª parcela)</label>
+          <label for="fDate" id="fDateLabel">Início (1ª parcela)</label>
           <input class="input" id="fDate" type="month">
         </div>
         <div class="field">
