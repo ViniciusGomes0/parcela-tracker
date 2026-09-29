@@ -9,6 +9,8 @@
   var SALARY_KEY = 'parcela-tracker:salary';   // salário mensal — por aparelho
   var SPEND_KEY = 'parcela-tracker:spending';        // espelho dos gastos do dia a dia
   var SPEND_REV_KEY = 'parcela-tracker:spending:rev';
+  var NOTES_KEY = 'parcela-tracker:notes';           // lembretes livres do calendário
+  var NOTES_REV_KEY = 'parcela-tracker:notes:rev';
   var fmtBRL = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
   var monthNames = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
   var monthNamesFull = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
@@ -136,6 +138,8 @@
     // aba "Gastos": lançamentos do dia a dia + anexos (extratos/comprovantes)
     db.run('CREATE TABLE IF NOT EXISTS spending (id TEXT PRIMARY KEY, pos INTEGER, json TEXT)');
     db.run('CREATE TABLE IF NOT EXISTS attachments (id TEXT PRIMARY KEY, name TEXT, type TEXT, data BLOB)');
+    // lembretes livres marcados no calendário (não ligados a nenhuma compra)
+    db.run('CREATE TABLE IF NOT EXISTS notes (id TEXT PRIMARY KEY, pos INTEGER, json TEXT)');
   }
   function readMeta(k) {
     try {
@@ -269,6 +273,67 @@
       }
     } else {
       spend = lsData;
+    }
+  }
+
+  // ---- storage dos LEMBRETES livres do calendário ----
+  // Estrutura: [ {id, text, y, m, day} ] — mesmo padrão de espelho da "spending".
+  var notes = [];
+
+  function normalizeNotes(arr) {
+    if (!Array.isArray(arr)) arr = [];
+    arr.forEach(function (n) {
+      if (!n.id) n.id = uid();
+      if (!n.text) n.text = '';
+      if (typeof n.y !== 'number') n.y = new Date().getFullYear();
+      if (typeof n.m !== 'number') n.m = new Date().getMonth();
+      if (typeof n.day !== 'number') n.day = 1;
+    });
+    return arr;
+  }
+  function loadNotesLS() {
+    try {
+      var raw = localStorage.getItem(NOTES_KEY);
+      return normalizeNotes(raw ? JSON.parse(raw) : []);
+    } catch (e) { return []; }
+  }
+  function readNotesFromDb() {
+    try {
+      var res = db.exec("SELECT json FROM notes WHERE id='__data__'");
+      if (res.length && res[0].values && res[0].values.length) {
+        return normalizeNotes(JSON.parse(res[0].values[0][0]));
+      }
+    } catch (e) {}
+    return [];
+  }
+  function writeNotesToDb(rev) {
+    try {
+      db.run("INSERT OR REPLACE INTO notes (id, pos, json) VALUES ('__data__', 0, ?)", [JSON.stringify(notes)]);
+      if (rev != null) writeMeta('notesrev', rev);
+    } catch (e) {}
+  }
+  function saveNotes() {
+    var rev = Date.now();
+    try { localStorage.setItem(NOTES_KEY, JSON.stringify(notes)); localStorage.setItem(NOTES_REV_KEY, String(rev)); } catch (e) {}
+    if (dbReady && db) { try { writeNotesToDb(rev); schedulePersist(); } catch (e) {} }
+  }
+  function reconcileNotes() {
+    var lsData = loadNotesLS();
+    var lsRev = parseInt(localStorage.getItem(NOTES_REV_KEY), 10) || 0;
+    if (dbReady && db) {
+      var dbData = readNotesFromDb();
+      var dbRev = parseInt(readMeta('notesrev'), 10) || 0;
+      if (lsRev > dbRev) {
+        notes = lsData; writeNotesToDb(lsRev); persistNow();
+      } else if (dbRev > lsRev) {
+        notes = dbData;
+        try { localStorage.setItem(NOTES_KEY, JSON.stringify(notes)); localStorage.setItem(NOTES_REV_KEY, String(dbRev)); } catch (e) {}
+      } else {
+        notes = dbData.length ? dbData : lsData;
+        if (!dbData.length && lsData.length) { writeNotesToDb(lsRev || Date.now()); persistNow(); }
+      }
+    } else {
+      notes = lsData;
     }
   }
 
@@ -763,6 +828,10 @@
     return out;
   }
 
+  function notesForDay(y, m, day) {
+    return notes.filter(function (n) { return n.y === y && n.m === m && n.day === day; });
+  }
+
   function renderCalendar() {
     var y = calCursor.y, m = calCursor.m;
     document.getElementById('calTitle').textContent = monthNamesFull[m] + ' de ' + y;
@@ -789,6 +858,7 @@
         var dd = Math.min(o.e.dueDay || 5, dim);
         return dd === day;
       });
+      var dNotes = notesForDay(y, m, day);
       var cls = 'cal-day';
       if (isCurrentMonth && today.getDate() === day) cls += ' today';
       if (dayOcc.length) {
@@ -799,12 +869,16 @@
       // dia 1 vai direto para a coluna do seu dia da semana (sem células vazias no grid)
       if (day === 1 && first > 0) cell.style.gridColumnStart = first + 1;
       cell.appendChild(el('span', null, String(day)));
-      if (dayOcc.length) cell.appendChild(el('div', 'dot'));
-      if (dayOcc.length) {
-        cell.addEventListener('click', function (dOcc, d) {
-          return function () { openDaySheet(y, m, d, dOcc); };
-        }(dayOcc, day));
+      if (dayOcc.length || dNotes.length) {
+        var dots = el('div', 'cal-dots');
+        if (dayOcc.length) dots.appendChild(el('span', 'dot'));
+        if (dNotes.length) dots.appendChild(el('span', 'dot dot-note'));
+        cell.appendChild(dots);
       }
+      // qualquer dia é clicável: dá pra marcar um lembrete mesmo sem nenhuma parcela vencendo
+      cell.addEventListener('click', function (dOcc, dNts, d) {
+        return function () { openDaySheet(y, m, d, dOcc, dNts); };
+      }(dayOcc, dNotes, day));
       grid.appendChild(cell);
     }
 
@@ -823,12 +897,59 @@
     occ.forEach(function (o) { listWrap.appendChild(buildCard(o.e)); });
   }
 
-  function openDaySheet(y, m, day, occ) {
+  var dayNoteCtx = null; // { y, m, day } do dia atualmente aberto na sheet
+
+  function buildNoteRow(n) {
+    var row = el('div', 'note-row');
+    row.appendChild(el('span', 'note-text', escapeHtml(n.text)));
+    var del = el('button', 'btn icon danger sm');
+    del.setAttribute('aria-label', 'Excluir lembrete');
+    del.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>';
+    del.onclick = function () { removeNote(n.id); };
+    row.appendChild(del);
+    return row;
+  }
+
+  function renderDayNoteList() {
+    var noteWrap = document.getElementById('dayNoteList');
+    noteWrap.innerHTML = '';
+    if (!dayNoteCtx) return;
+    var dNotes = notesForDay(dayNoteCtx.y, dayNoteCtx.m, dayNoteCtx.day);
+    if (!dNotes.length) {
+      noteWrap.appendChild(el('div', 'note-empty', 'Nenhum lembrete neste dia.'));
+      return;
+    }
+    dNotes.forEach(function (n) { noteWrap.appendChild(buildNoteRow(n)); });
+  }
+
+  function addNote() {
+    var input = document.getElementById('dayNoteInput');
+    var text = input.value.trim();
+    if (!text || !dayNoteCtx) return;
+    notes.push({ id: uid(), text: text, y: dayNoteCtx.y, m: dayNoteCtx.m, day: dayNoteCtx.day });
+    saveNotes();
+    input.value = '';
+    renderDayNoteList();
+    renderCalendar();
+    showToast('Lembrete adicionado');
+  }
+
+  function removeNote(id) {
+    notes = notes.filter(function (n) { return n.id !== id; });
+    saveNotes();
+    renderDayNoteList();
+    renderCalendar();
+  }
+
+  function openDaySheet(y, m, day, occ, dNotes) {
     document.getElementById('daySheetTitle').textContent =
       String(day).padStart(2, '0') + ' de ' + monthNamesFull[m] + ' de ' + y;
     var wrap = document.getElementById('dayList');
     wrap.innerHTML = '';
-    occ.forEach(function (o) { wrap.appendChild(buildCard(o.e)); });
+    (occ || []).forEach(function (o) { wrap.appendChild(buildCard(o.e)); });
+    dayNoteCtx = { y: y, m: m, day: day };
+    document.getElementById('dayNoteInput').value = '';
+    renderDayNoteList();
     dayBackdrop.classList.add('open');
     document.body.style.overflow = 'hidden';
   }
@@ -846,8 +967,12 @@
   };
 
   var dayBackdrop = document.getElementById('dayBackdrop');
-  function closeDaySheet() { dayBackdrop.classList.remove('open'); document.body.style.overflow = ''; }
+  function closeDaySheet() { dayBackdrop.classList.remove('open'); document.body.style.overflow = ''; dayNoteCtx = null; }
   document.getElementById('dayCloseBtn').onclick = closeDaySheet;
+  document.getElementById('dayNoteAddBtn').onclick = addNote;
+  document.getElementById('dayNoteInput').addEventListener('keydown', function (ev) {
+    if (ev.key === 'Enter') { ev.preventDefault(); addNote(); }
+  });
   dayBackdrop.addEventListener('click', function (ev) { if (ev.target === dayBackdrop) closeDaySheet(); });
 
   // ---- sheet / form ----
@@ -1791,6 +1916,7 @@
   renderCatGrid();
   initDB().then(function () {
     reconcileSpending();
+    reconcileNotes();
     updateStorageStatus();
     renderAll();
     renderSpending();
