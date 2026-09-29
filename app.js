@@ -7,6 +7,8 @@
   var THEME_KEY = 'parcela-tracker:theme';
   var CUSTOM_CAT_KEY = 'parcela-tracker:customCategories';
   var SALARY_KEY = 'parcela-tracker:salary';   // salário mensal — por aparelho
+  var SPEND_KEY = 'parcela-tracker:spending';        // espelho dos gastos do dia a dia
+  var SPEND_REV_KEY = 'parcela-tracker:spending:rev';
   var fmtBRL = new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' });
   var monthNames = ['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
   var monthNamesFull = ['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
@@ -131,6 +133,19 @@
   function ensureSchema() {
     db.run('CREATE TABLE IF NOT EXISTS expenses (id TEXT PRIMARY KEY, pos INTEGER, json TEXT)');
     db.run('CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT)');
+    // aba "Gastos": lançamentos do dia a dia + anexos (extratos/comprovantes)
+    db.run('CREATE TABLE IF NOT EXISTS spending (id TEXT PRIMARY KEY, pos INTEGER, json TEXT)');
+    db.run('CREATE TABLE IF NOT EXISTS attachments (id TEXT PRIMARY KEY, name TEXT, type TEXT, data BLOB)');
+  }
+  function readMeta(k) {
+    try {
+      var res = db.exec("SELECT v FROM meta WHERE k=?", [k]);
+      if (res.length && res[0].values && res[0].values.length) return res[0].values[0][0];
+    } catch (e) {}
+    return null;
+  }
+  function writeMeta(k, v) {
+    try { db.run('INSERT OR REPLACE INTO meta (k, v) VALUES (?, ?)', [k, String(v)]); } catch (e) {}
   }
   function readDbRev() {
     try {
@@ -190,6 +205,93 @@
     }
     updateStorageStatus();
     return ok;
+  }
+
+  // ---- storage dos GASTOS (dia a dia) ----
+  // Estrutura: { entries: [ {id,name,amount,date,method,note,attachments:[{id,name,type}]} ], docs: { 'YYYY-MM': [{id,name,type}] } }
+  // Metadados vão pro localStorage (offline) + tabela SQLite; os arquivos (fotos/PDF)
+  // ficam na tabela attachments (BLOB), então entram no backup .sqlite.
+  var spend = { entries: [], docs: {} };
+
+  function normalizeSpend(d) {
+    if (!d || typeof d !== 'object') d = {};
+    if (!Array.isArray(d.entries)) d.entries = [];
+    if (!d.docs || typeof d.docs !== 'object') d.docs = {};
+    d.entries.forEach(function (e) {
+      if (!Array.isArray(e.attachments)) e.attachments = [];
+      if (typeof e.amount !== 'number') e.amount = parseFloat(e.amount) || 0;
+      if (!e.method) e.method = 'pix';
+    });
+    return d;
+  }
+  function loadSpendLS() {
+    try {
+      var raw = localStorage.getItem(SPEND_KEY);
+      return normalizeSpend(raw ? JSON.parse(raw) : null);
+    } catch (e) { return { entries: [], docs: {} }; }
+  }
+  function readSpendingFromDb() {
+    try {
+      var res = db.exec("SELECT json FROM spending WHERE id='__data__'");
+      if (res.length && res[0].values && res[0].values.length) {
+        return normalizeSpend(JSON.parse(res[0].values[0][0]));
+      }
+    } catch (e) {}
+    return { entries: [], docs: {} };
+  }
+  function writeSpendingToDb(rev) {
+    try {
+      db.run("INSERT OR REPLACE INTO spending (id, pos, json) VALUES ('__data__', 0, ?)", [JSON.stringify(spend)]);
+      if (rev != null) writeMeta('spendrev', rev);
+    } catch (e) {}
+  }
+  function saveSpend() {
+    var rev = Date.now();
+    try { localStorage.setItem(SPEND_KEY, JSON.stringify(spend)); localStorage.setItem(SPEND_REV_KEY, String(rev)); } catch (e) {}
+    if (dbReady && db) { try { writeSpendingToDb(rev); schedulePersist(); } catch (e) {} }
+  }
+  function reconcileSpending() {
+    var lsData = loadSpendLS();
+    var lsRev = parseInt(localStorage.getItem(SPEND_REV_KEY), 10) || 0;
+    if (dbReady && db) {
+      var dbData = readSpendingFromDb();
+      var dbRev = parseInt(readMeta('spendrev'), 10) || 0;
+      var lsHas = lsData.entries.length || Object.keys(lsData.docs).length;
+      var dbHas = dbData.entries.length || Object.keys(dbData.docs).length;
+      if (lsRev > dbRev) {
+        spend = lsData; writeSpendingToDb(lsRev); persistNow();
+      } else if (dbRev > lsRev) {
+        spend = dbData;
+        try { localStorage.setItem(SPEND_KEY, JSON.stringify(spend)); localStorage.setItem(SPEND_REV_KEY, String(dbRev)); } catch (e) {}
+      } else {
+        spend = dbHas ? dbData : lsData;
+        if (!dbHas && lsHas) { writeSpendingToDb(lsRev || Date.now()); persistNow(); }
+      }
+    } else {
+      spend = lsData;
+    }
+  }
+
+  // anexos (BLOB) na tabela attachments
+  function putAttachment(id, name, type, uint8) {
+    if (!dbReady || !db) return false;
+    try { db.run('INSERT OR REPLACE INTO attachments (id, name, type, data) VALUES (?, ?, ?, ?)', [id, name || '', type || '', uint8]); schedulePersist(); return true; }
+    catch (e) { return false; }
+  }
+  function getAttachmentBlob(id) {
+    if (!dbReady || !db) return null;
+    try {
+      var st = db.prepare('SELECT type, data FROM attachments WHERE id=?');
+      st.bind([id]);
+      var blob = null;
+      if (st.step()) { var row = st.get(); blob = new Blob([row[1]], { type: row[0] || 'application/octet-stream' }); }
+      st.free();
+      return blob;
+    } catch (e) { return null; }
+  }
+  function delAttachment(id) {
+    if (!dbReady || !db) return;
+    try { db.run('DELETE FROM attachments WHERE id=?', [id]); schedulePersist(); } catch (e) {}
   }
 
   function updateStorageStatus() {
@@ -623,10 +725,14 @@
   var tabButtons = document.querySelectorAll('.tab-btn');
   var tabPanels = document.querySelectorAll('.tab-panel');
   var fab = document.getElementById('fab');
+  var currentTab = 'home';
   function switchTab(name) {
+    currentTab = name;
     tabButtons.forEach(function (b) { b.classList.toggle('active', b.dataset.tab === name); });
     tabPanels.forEach(function (p) { p.hidden = p.dataset.tab !== name; });
-    fab.classList.toggle('hidden-tab', name !== 'home');
+    // FAB aparece nas abas que têm "Adicionar" (Início e Gastos)
+    fab.classList.toggle('hidden-tab', name !== 'home' && name !== 'spending');
+    if (name === 'spending') renderSpending();
     window.scrollTo(0, 0);
   }
   tabButtons.forEach(function (b) { b.onclick = function () { switchTab(b.dataset.tab); }; });
@@ -1064,7 +1170,10 @@
 
   // ---- settings: backup / restore / wipe ----
   document.getElementById('exportBtn').onclick = function () {
-    var blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+    // formato novo: objeto com parcelas + gastos (metadados). As fotos/PDF ficam no
+    // backup .sqlite. Import antigo (array puro) continua funcionando.
+    var payload = { version: 2, installments: state, spending: spend };
+    var blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
     var url = URL.createObjectURL(blob);
     var a = document.createElement('a');
     var stamp = new Date().toISOString().slice(0, 10);
@@ -1084,10 +1193,17 @@
     reader.onload = function () {
       try {
         var data = JSON.parse(reader.result);
-        if (!Array.isArray(data)) throw new Error('formato inválido');
-        state = data.map(normalize);
+        if (Array.isArray(data)) {
+          state = data.map(normalize);           // backup antigo (só parcelas)
+        } else if (data && typeof data === 'object') {
+          if (Array.isArray(data.installments)) state = data.installments.map(normalize);
+          if (data.spending) { spend = normalizeSpend(data.spending); saveSpend(); }
+        } else {
+          throw new Error('formato inválido');
+        }
         save();
         renderAll();
+        renderSpending();
         showToast('Backup importado com sucesso');
       } catch (e) {
         showToast('Arquivo inválido');
@@ -1126,17 +1242,20 @@
     var reader = new FileReader();
     reader.onload = function () {
       try {
-        var incoming = new SQL.Database(new Uint8Array(reader.result));
-        incoming.run('CREATE TABLE IF NOT EXISTS expenses (id TEXT PRIMARY KEY, pos INTEGER, json TEXT)');
-        incoming.run('CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT)');
-        db = incoming;
+        db = new SQL.Database(new Uint8Array(reader.result));
         dbReady = true;
+        ensureSchema();                       // garante todas as tabelas (parcelas + gastos + anexos)
         state = readStateFromDb();
         var rev = Date.now();                 // restauração é a versão mais recente
         writeDbRev(rev);
         try { localStorage.setItem(KEY, JSON.stringify(state)); writeLsRev(rev); } catch (e) {}
+        // recarrega os gastos do banco restaurado
+        spend = readSpendingFromDb();
+        writeMeta('spendrev', rev);
+        try { localStorage.setItem(SPEND_KEY, JSON.stringify(spend)); localStorage.setItem(SPEND_REV_KEY, String(rev)); } catch (e) {}
         persistNow();
         renderAll();
+        renderSpending();
         updateStorageStatus();
         showToast('Banco restaurado (' + state.length + ' compras)');
       } catch (e) { showToast('Arquivo .sqlite inválido'); }
@@ -1198,7 +1317,10 @@
   }
 
   // ---- events ----
-  document.getElementById('fab').onclick = openNew;
+  document.getElementById('fab').onclick = function () {
+    if (currentTab === 'spending') openSpendNew();
+    else openNew();
+  };
   document.getElementById('cancelBtn').onclick = closeSheet;
   document.getElementById('saveBtn').onclick = saveForm;
   fTotal.addEventListener('input', updateHint);
@@ -1208,6 +1330,8 @@
     if (ev.key !== 'Escape') return;
     if (backdrop.classList.contains('open')) closeSheet();
     if (dayBackdrop.classList.contains('open')) closeDaySheet();
+    if (spendBackdrop.classList.contains('open')) closeSpendSheet();
+    if (viewer.classList.contains('open')) closeViewer();
   });
 
   // today label
@@ -1275,10 +1399,401 @@
     });
   })();
 
+  // ============================================================
+  //  ABA GASTOS (dia a dia) — UI
+  // ============================================================
+  var PAY_METHODS = [
+    { id: 'pix',      label: 'Pix',      icon: '⚡' },
+    { id: 'debito',   label: 'Débito',   icon: '💳' },
+    { id: 'credito',  label: 'Crédito',  icon: '🪙' },
+    { id: 'dinheiro', label: 'Dinheiro', icon: '💵' }
+  ];
+  function methodById(id) {
+    for (var i = 0; i < PAY_METHODS.length; i++) if (PAY_METHODS[i].id === id) return PAY_METHODS[i];
+    return PAY_METHODS[0];
+  }
+  function localISODate(d) {
+    d = d || new Date();
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  }
+  function spendMonthKey() { return spendCursor.y + '-' + String(spendCursor.m + 1).padStart(2, '0'); }
+
+  var spendCursor = (function () { var d = new Date(); return { y: d.getFullYear(), m: d.getMonth() }; })();
+  var spendUrls = [];                 // object URLs a revogar entre renders
+  function revokeSpendUrls() { spendUrls.forEach(function (u) { try { URL.revokeObjectURL(u); } catch (e) {} }); spendUrls = []; }
+
+  // cria um <img> de miniatura (ou tile de PDF) que abre o visualizador ao tocar
+  function attThumb(att) {
+    var isImg = (att.type || '').indexOf('image') === 0;
+    var tile = el('button', 'att-tile' + (isImg ? '' : ' pdf'));
+    tile.type = 'button';
+    if (isImg) {
+      var img = document.createElement('img');
+      var blob = getAttachmentBlob(att.id);
+      if (blob) { var u = URL.createObjectURL(blob); spendUrls.push(u); img.src = u; }
+      img.alt = att.name || 'Comprovante';
+      tile.appendChild(img);
+      tile.onclick = function () { openViewerBlob(att.id, true); };
+    } else {
+      tile.innerHTML = '<span class="att-pdf-ico">📄</span><span class="att-pdf-name">' + escapeHtml((att.name || 'arquivo').slice(0, 14)) + '</span>';
+      tile.onclick = function () { openViewerBlob(att.id, false); };
+    }
+    return tile;
+  }
+
+  function renderSpending() {
+    var listWrap = document.getElementById('spendList');
+    if (!listWrap) return;
+    revokeSpendUrls();
+
+    var y = spendCursor.y, m = spendCursor.m, key = spendMonthKey();
+    document.getElementById('spendTitle').textContent = monthNamesFull[m] + ' de ' + y;
+
+    var items = spend.entries.filter(function (e) { return e.date && e.date.slice(0, 7) === key; });
+    items.sort(function (a, b) {
+      if (a.date !== b.date) return a.date < b.date ? 1 : -1;      // dia mais recente primeiro
+      return (b.createdAt || 0) - (a.createdAt || 0);
+    });
+
+    var total = 0, byMethod = {};
+    items.forEach(function (e) {
+      total += e.amount;
+      byMethod[e.method] = (byMethod[e.method] || 0) + e.amount;
+    });
+
+    document.getElementById('spendTotal').textContent = fmtBRL.format(total);
+    document.getElementById('spendTotalMeta').textContent =
+      items.length ? (items.length === 1 ? '1 lançamento' : items.length + ' lançamentos') : 'Nenhum gasto lançado';
+
+    // resumo por forma de pagamento
+    var ms = document.getElementById('methodSummary');
+    ms.innerHTML = '';
+    PAY_METHODS.forEach(function (pm) {
+      if (!byMethod[pm.id]) return;
+      var chip = el('div', 'method-card m-' + pm.id);
+      chip.innerHTML = '<div class="mc-top">' + pm.icon + ' ' + pm.label + '</div>' +
+        '<div class="mc-val live">' + fmtBRL.format(byMethod[pm.id]) + '</div>';
+      ms.appendChild(chip);
+    });
+
+    // extratos/comprovantes do mês
+    var docs = (spend.docs && spend.docs[key]) || [];
+    document.getElementById('docCount').textContent = docs.length;
+    var docStrip = document.getElementById('docStrip');
+    docStrip.innerHTML = '';
+    if (!docs.length) {
+      docStrip.appendChild(el('div', 'doc-empty', 'Nenhum documento neste mês ainda.'));
+    } else {
+      docs.forEach(function (att) {
+        var wrap = el('div', 'doc-tile-wrap');
+        wrap.appendChild(attThumb(att));
+        var rm = el('button', 'att-remove', '×');
+        rm.setAttribute('aria-label', 'Remover');
+        rm.onclick = function (ev) { ev.stopPropagation(); removeMonthDoc(key, att.id); };
+        wrap.appendChild(rm);
+        docStrip.appendChild(wrap);
+      });
+    }
+
+    // lista de lançamentos agrupada por dia
+    listWrap.innerHTML = '';
+    document.getElementById('spendCount').textContent = items.length;
+    if (!items.length) {
+      var empty = el('div', 'empty');
+      empty.innerHTML = '<div class="ico">🧾</div><h3>Nenhum gasto no mês</h3><p>Toque em "Adicionar" para lançar seus gastos do dia a dia.</p>';
+      listWrap.appendChild(empty);
+      return;
+    }
+    var lastDay = null;
+    items.forEach(function (e) {
+      if (e.date !== lastDay) {
+        lastDay = e.date;
+        var p = e.date.split('-');
+        var head = el('div', 'spend-day', parseInt(p[2], 10) + ' de ' + monthNamesFull[parseInt(p[1], 10) - 1]);
+        listWrap.appendChild(head);
+      }
+      listWrap.appendChild(buildSpendItem(e));
+    });
+  }
+
+  function buildSpendItem(e) {
+    var pm = methodById(e.method);
+    var row = el('div', 'spend-item');
+    row.onclick = function () { openSpendEdit(e.id); };
+
+    var main = el('div', 'spend-main');
+    var nameRow = el('div', 'spend-name-row');
+    nameRow.appendChild(el('span', 'spend-name', escapeHtml(e.name)));
+    nameRow.appendChild(el('span', 'pay-chip m-' + pm.id, pm.icon + ' ' + pm.label));
+    main.appendChild(nameRow);
+    if (e.note) main.appendChild(el('div', 'spend-note', escapeHtml(e.note)));
+    if (e.attachments && e.attachments.length) {
+      var strip = el('div', 'att-strip mini');
+      e.attachments.forEach(function (att) { strip.appendChild(attThumb(att)); });
+      main.appendChild(strip);
+    }
+    row.appendChild(main);
+    row.appendChild(el('div', 'spend-amount live', fmtBRL.format(e.amount)));
+    return row;
+  }
+
+  // ---- visualizador ----
+  var viewer = document.getElementById('viewer');
+  function openViewerBlob(id, isImg) {
+    var blob = getAttachmentBlob(id);
+    if (!blob) { showToast('Arquivo indisponível'); return; }
+    var url = URL.createObjectURL(blob);
+    if (isImg) {
+      document.getElementById('viewerImg').src = url;
+      viewer.classList.add('open');
+      viewer._url = url;
+    } else {
+      window.open(url, '_blank');
+      setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+    }
+  }
+  function closeViewer() {
+    viewer.classList.remove('open');
+    if (viewer._url) { try { URL.revokeObjectURL(viewer._url); } catch (e) {} viewer._url = null; }
+  }
+  document.getElementById('viewerClose').onclick = closeViewer;
+  viewer.addEventListener('click', function (ev) { if (ev.target === viewer) closeViewer(); });
+
+  // ---- upload de extratos/comprovantes do mês ----
+  function fileToUint8(file) {
+    return new Promise(function (resolve, reject) {
+      var r = new FileReader();
+      r.onload = function () { resolve(new Uint8Array(r.result)); };
+      r.onerror = function () { reject(r.error); };
+      r.readAsArrayBuffer(file);
+    });
+  }
+  var docInput = document.getElementById('docInput');
+  docInput.addEventListener('change', function (ev) {
+    var files = ev.target.files;
+    if (!files || !files.length) return;
+    if (!dbReady || !db) { showToast('Aguarde o banco carregar para anexar'); ev.target.value = ''; return; }
+    var key = spendMonthKey();
+    if (!spend.docs[key]) spend.docs[key] = [];
+    var chain = Promise.resolve();
+    Array.prototype.slice.call(files).forEach(function (file) {
+      chain = chain.then(function () {
+        return fileToUint8(file).then(function (u8) {
+          var id = 'att' + uid();
+          putAttachment(id, file.name, file.type, u8);
+          spend.docs[key].push({ id: id, name: file.name, type: file.type });
+        });
+      });
+    });
+    chain.then(function () {
+      saveSpend();
+      renderSpending();
+      showToast('Documento anexado');
+    }).catch(function () { showToast('Falha ao anexar'); });
+    ev.target.value = '';
+  });
+  function removeMonthDoc(key, attId) {
+    if (!confirm('Remover este documento?')) return;
+    spend.docs[key] = (spend.docs[key] || []).filter(function (a) { return a.id !== attId; });
+    delAttachment(attId);
+    saveSpend();
+    renderSpending();
+    showToast('Documento removido');
+  }
+
+  // ---- sheet de gasto ----
+  var spendBackdrop = document.getElementById('spendBackdrop');
+  var sName = document.getElementById('sName');
+  var sAmount = document.getElementById('sAmount');
+  var sDate = document.getElementById('sDate');
+  var sNote = document.getElementById('sNote');
+  var paySeg = document.getElementById('paySeg');
+  var attStrip = document.getElementById('attStrip');
+  var attInput = document.getElementById('attInput');
+  var editingSpendId = null;
+  var selectedMethod = 'pix';
+  var draftAtt = [];                 // {file,name,type}(novo) | {id,name,type,existing:true}
+
+  PAY_METHODS.forEach(function (pm) {
+    var b = el('button', 'seg-btn', pm.icon + ' ' + pm.label);
+    b.type = 'button';
+    b.dataset.method = pm.id;
+    b.onclick = function () { selectMethod(pm.id); };
+    paySeg.appendChild(b);
+  });
+  function selectMethod(id) {
+    selectedMethod = id;
+    paySeg.querySelectorAll('.seg-btn').forEach(function (b) { b.classList.toggle('active', b.dataset.method === id); });
+  }
+
+  function renderDraftAtt() {
+    attStrip.innerHTML = '';
+    draftAtt.forEach(function (a, i) {
+      var isImg = (a.type || '').indexOf('image') === 0;
+      var wrap = el('div', 'doc-tile-wrap');
+      var tile = el('button', 'att-tile' + (isImg ? '' : ' pdf'));
+      tile.type = 'button';
+      if (isImg) {
+        var img = document.createElement('img');
+        var u;
+        if (a.file) { u = URL.createObjectURL(a.file); }
+        else { var blob = getAttachmentBlob(a.id); u = blob ? URL.createObjectURL(blob) : ''; }
+        if (u) { spendUrls.push(u); img.src = u; }
+        tile.appendChild(img);
+      } else {
+        tile.innerHTML = '<span class="att-pdf-ico">📄</span><span class="att-pdf-name">' + escapeHtml((a.name || 'arquivo').slice(0, 14)) + '</span>';
+      }
+      tile.onclick = function () { if (!a.file) openViewerBlob(a.id, isImg); };
+      wrap.appendChild(tile);
+      var rm = el('button', 'att-remove', '×');
+      rm.setAttribute('aria-label', 'Remover');
+      rm.onclick = function (ev) { ev.stopPropagation(); draftAtt.splice(i, 1); renderDraftAtt(); };
+      wrap.appendChild(rm);
+      attStrip.appendChild(wrap);
+    });
+  }
+  attInput.addEventListener('change', function (ev) {
+    var files = ev.target.files;
+    if (!files) return;
+    Array.prototype.slice.call(files).forEach(function (file) {
+      draftAtt.push({ file: file, name: file.name, type: file.type });
+    });
+    renderDraftAtt();
+    ev.target.value = '';
+  });
+
+  function openSpendSheet() { spendBackdrop.classList.add('open'); document.body.style.overflow = 'hidden'; }
+  function closeSpendSheet() { spendBackdrop.classList.remove('open'); document.body.style.overflow = ''; editingSpendId = null; }
+
+  function clearSpendErrors() {
+    document.getElementById('esName').hidden = true; sName.classList.remove('err');
+    document.getElementById('esAmount').hidden = true; sAmount.classList.remove('err');
+  }
+
+  function openSpendNew() {
+    editingSpendId = null;
+    document.getElementById('spendSheetTitle').textContent = 'Novo gasto';
+    document.getElementById('spendDeleteBtn').hidden = true;
+    sName.value = '';
+    sAmount.value = '';
+    // se estiver vendo o mês atual usa hoje; se for um mês passado, usa o dia 1 daquele mês
+    var now = new Date();
+    if (now.getFullYear() === spendCursor.y && now.getMonth() === spendCursor.m) sDate.value = localISODate(now);
+    else sDate.value = spendMonthKey() + '-01';
+    sNote.value = '';
+    selectMethod('pix');
+    draftAtt = [];
+    renderDraftAtt();
+    clearSpendErrors();
+    openSpendSheet();
+    setTimeout(function () { sName.focus(); }, 300);
+  }
+  function openSpendEdit(id) {
+    var e = null;
+    for (var i = 0; i < spend.entries.length; i++) if (spend.entries[i].id === id) { e = spend.entries[i]; break; }
+    if (!e) return;
+    editingSpendId = id;
+    document.getElementById('spendSheetTitle').textContent = 'Editar gasto';
+    document.getElementById('spendDeleteBtn').hidden = false;
+    sName.value = e.name;
+    sAmount.value = e.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    sDate.value = e.date;
+    sNote.value = e.note || '';
+    selectMethod(e.method || 'pix');
+    draftAtt = (e.attachments || []).map(function (a) { return { id: a.id, name: a.name, type: a.type, existing: true }; });
+    renderDraftAtt();
+    clearSpendErrors();
+    openSpendSheet();
+  }
+
+  function saveSpendForm() {
+    clearSpendErrors();
+    var name = sName.value.trim();
+    var amount = parseAmount(sAmount.value);
+    var date = sDate.value || localISODate();
+    var ok = true;
+    if (!name) { document.getElementById('esName').hidden = false; sName.classList.add('err'); ok = false; }
+    if (isNaN(amount) || amount <= 0) { document.getElementById('esAmount').hidden = false; sAmount.classList.add('err'); ok = false; }
+    if (!ok) return;
+    amount = Math.round(amount * 100) / 100;
+
+    // grava anexos novos no banco; mantém os já existentes
+    var chain = Promise.resolve();
+    var finalAtt = [];
+    draftAtt.forEach(function (a) {
+      if (a.existing) { finalAtt.push({ id: a.id, name: a.name, type: a.type }); return; }
+      chain = chain.then(function () {
+        return fileToUint8(a.file).then(function (u8) {
+          var id = 'att' + uid();
+          if (putAttachment(id, a.name, a.type, u8)) finalAtt.push({ id: id, name: a.name, type: a.type });
+        });
+      });
+    });
+
+    chain.then(function () {
+      if (editingSpendId) {
+        for (var i = 0; i < spend.entries.length; i++) {
+          if (spend.entries[i].id === editingSpendId) {
+            var e = spend.entries[i];
+            // remove do banco os anexos que foram tirados na edição
+            (e.attachments || []).forEach(function (old) {
+              if (!finalAtt.some(function (n) { return n.id === old.id; })) delAttachment(old.id);
+            });
+            e.name = name; e.amount = amount; e.date = date;
+            e.method = selectedMethod; e.note = sNote.value.trim(); e.attachments = finalAtt;
+            break;
+          }
+        }
+      } else {
+        spend.entries.push({
+          id: 's' + uid(), name: name, amount: amount, date: date,
+          method: selectedMethod, note: sNote.value.trim(), attachments: finalAtt,
+          createdAt: Date.now()
+        });
+      }
+      saveSpend();
+      closeSpendSheet();
+      renderSpending();
+      showToast(editingSpendId ? 'Gasto atualizado' : 'Gasto lançado');
+    }).catch(function () { showToast('Falha ao salvar'); });
+  }
+
+  function deleteSpendEntry() {
+    if (!editingSpendId) return;
+    if (!confirm('Excluir este gasto?')) return;
+    for (var i = 0; i < spend.entries.length; i++) {
+      if (spend.entries[i].id === editingSpendId) {
+        (spend.entries[i].attachments || []).forEach(function (a) { delAttachment(a.id); });
+        spend.entries.splice(i, 1);
+        break;
+      }
+    }
+    saveSpend();
+    closeSpendSheet();
+    renderSpending();
+    showToast('Gasto excluído');
+  }
+
+  document.getElementById('spendCancelBtn').onclick = closeSpendSheet;
+  document.getElementById('spendSaveBtn').onclick = saveSpendForm;
+  document.getElementById('spendDeleteBtn').onclick = deleteSpendEntry;
+  spendBackdrop.addEventListener('click', function (ev) { if (ev.target === spendBackdrop) closeSpendSheet(); });
+  document.getElementById('spendPrev').onclick = function () {
+    spendCursor.m--; if (spendCursor.m < 0) { spendCursor.m = 11; spendCursor.y--; } renderSpending();
+  };
+  document.getElementById('spendNext').onclick = function () {
+    spendCursor.m++; if (spendCursor.m > 11) { spendCursor.m = 0; spendCursor.y++; } renderSpending();
+  };
+  document.getElementById('spendTodayBtn').onclick = function () {
+    var d = new Date(); spendCursor = { y: d.getFullYear(), m: d.getMonth() }; renderSpending();
+  };
+
   renderCatGrid();
   initDB().then(function () {
+    reconcileSpending();
     updateStorageStatus();
     renderAll();
+    renderSpending();
   });
 
   // persist the DB file when leaving/hiding, as a safety net for the debounced write

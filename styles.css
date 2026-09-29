@@ -507,6 +507,18 @@ header.top .sub { color: var(--text-3); font-size: 13px; margin-top: 6px; font-w
   .cat-grid { grid-template-columns: repeat(3, 1fr); }
 }
 
+/* Em telas largas (desktop/tablet) os sheets viram um modal centralizado de verdade;
+   no celular continuam como bottom sheet colado embaixo, ocupando 100% da largura. */
+@media (min-width: 620px) {
+  .backdrop { align-items: center; padding: 24px; }
+  .sheet {
+    border-radius: 24px;
+    max-height: 88dvh;
+    padding-bottom: 24px;
+  }
+  .sheet .grip { display: none; }
+}
+
 /* ===== Gasto fixo mensal ===== */
 .fixed-toggle {
   display: flex; align-items: center; gap: 12px;
@@ -530,3 +542,99 @@ header.top .sub { color: var(--text-3); font-size: 13px; margin-top: 6px; font-w
 .fixed-toggle.on .fixed-knob { transform: translateX(18px); }
 .badge.fixed-badge { background: color-mix(in srgb, var(--brand) 16%, transparent); color: var(--brand); }
 .card.fixed-card { border-left-color: var(--cat-color, var(--brand)); }
+
+/* ===== Aba Gastos (dia a dia) ===== */
+.spend-dash { grid-template-columns: 1fr; margin-bottom: 6px; }
+
+.method-summary { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin: 10px 0 4px; }
+.method-summary:empty { display: none; }
+.method-card {
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 12px 14px; border-left: 4px solid var(--brand);
+}
+.method-card .mc-top { font-size: 12px; color: var(--text-2); font-weight: 700; }
+.method-card .mc-val { font-size: 17px; font-weight: 800; margin-top: 3px; color: var(--text); }
+.method-card.m-pix { border-left-color: #22b8cf; }
+.method-card.m-debito { border-left-color: var(--brand); }
+.method-card.m-credito { border-left-color: #9b6bff; }
+.method-card.m-dinheiro { border-left-color: var(--accent); }
+
+/* documentos / comprovantes */
+.doc-strip { display: flex; gap: 10px; overflow-x: auto; padding: 4px 2px 2px; -webkit-overflow-scrolling: touch; }
+.doc-empty { color: var(--text-3); font-size: 13px; padding: 6px 2px; }
+.doc-tile-wrap { position: relative; flex: 0 0 auto; }
+.att-strip { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+.att-strip.mini { margin-top: 8px; margin-bottom: 0; }
+.att-tile {
+  width: 64px; height: 64px; border-radius: 12px; overflow: hidden;
+  border: 1px solid var(--border); background: var(--surface-2); padding: 0;
+  display: flex; align-items: center; justify-content: center; flex: 0 0 auto;
+}
+.att-strip.mini .att-tile { width: 48px; height: 48px; }
+.att-tile img { width: 100%; height: 100%; object-fit: cover; }
+.att-tile.pdf { flex-direction: column; gap: 2px; color: var(--text-2); }
+.att-pdf-ico { font-size: 22px; }
+.att-pdf-name { font-size: 8.5px; padding: 0 3px; text-align: center; line-height: 1.1; word-break: break-all; }
+.att-remove {
+  position: absolute; top: -6px; right: -6px; width: 22px; height: 22px; border-radius: 50%;
+  background: var(--danger); color: #fff; border: 2px solid var(--surface); font-size: 14px;
+  line-height: 1; display: flex; align-items: center; justify-content: center; z-index: 2;
+}
+.doc-add {
+  display: flex; align-items: center; gap: 10px; margin-top: 10px;
+  padding: 14px; border-radius: var(--radius-sm); cursor: pointer;
+  background: var(--surface-2); border: 1px dashed var(--border);
+  color: var(--text-2); font-weight: 600; font-size: 14px;
+}
+.doc-add.sm { padding: 11px; font-size: 13px; }
+.doc-add-ico {
+  width: 26px; height: 26px; border-radius: 8px; background: var(--brand); color: #fff;
+  display: flex; align-items: center; justify-content: center; font-size: 18px; flex: none;
+}
+
+/* lançamentos */
+.spend-day {
+  font-size: 12px; color: var(--text-3); font-weight: 700; text-transform: uppercase;
+  letter-spacing: .3px; margin: 16px 2px 8px;
+}
+.spend-item {
+  display: flex; align-items: flex-start; gap: 12px; cursor: pointer;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 13px 15px; margin-bottom: 9px;
+}
+.spend-item:active { transform: scale(.99); }
+.spend-main { flex: 1; min-width: 0; }
+.spend-name-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.spend-name { font-size: 15px; font-weight: 700; color: var(--text); }
+.spend-note { font-size: 12.5px; color: var(--text-3); margin-top: 3px; }
+.spend-amount { font-size: 16px; font-weight: 800; color: var(--text); white-space: nowrap; }
+.pay-chip {
+  font-size: 11px; font-weight: 700; padding: 2px 9px; border-radius: 999px;
+  background: var(--surface-2); color: var(--text-2); white-space: nowrap;
+}
+.pay-chip.m-pix { background: rgba(34,184,207,.16); color: #22b8cf; }
+.pay-chip.m-debito { background: color-mix(in srgb, var(--brand) 16%, transparent); color: var(--brand); }
+.pay-chip.m-credito { background: rgba(155,107,255,.18); color: #9b6bff; }
+.pay-chip.m-dinheiro { background: rgba(18,185,129,.16); color: var(--accent); }
+
+.pay-seg { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.pay-seg .seg-btn { flex: none; font-size: 13px; padding: 11px 0; }
+.pay-seg .seg-btn.active { color: var(--text); }
+
+.btn.block { width: 100%; margin-top: 4px; justify-content: center; }
+.btn.block.danger { border-color: var(--danger); }
+
+/* visualizador de comprovante */
+.viewer {
+  position: fixed; inset: 0; z-index: 120; background: rgba(0,0,0,.86);
+  display: none; align-items: center; justify-content: center; padding: 20px;
+}
+.viewer.open { display: flex; }
+.viewer img { max-width: 100%; max-height: 100%; border-radius: 12px; }
+.viewer-close {
+  position: absolute; top: 16px; right: 16px; width: 42px; height: 42px; border-radius: 50%;
+  background: rgba(255,255,255,.15); color: #fff; font-size: 20px; border: none;
+  display: flex; align-items: center; justify-content: center;
+}
+
+.btn[hidden] { display: none; }

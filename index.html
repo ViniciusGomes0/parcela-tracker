@@ -110,6 +110,51 @@
       <div class="cards" id="calList"></div>
     </section>
 
+    <!-- ===== SPENDING TAB ===== -->
+    <section class="tab-panel" id="tab-spending" data-tab="spending" hidden>
+      <header class="top">
+        <div>
+          <div class="eyebrow">Diário do mês</div>
+          <h1>Gastos</h1>
+        </div>
+      </header>
+
+      <div class="cal-nav">
+        <button class="cal-arrow" id="spendPrev" aria-label="Mês anterior">‹</button>
+        <div class="cal-title" id="spendTitle">—</div>
+        <button class="cal-arrow" id="spendNext" aria-label="Próximo mês">›</button>
+      </div>
+
+      <section class="dash spend-dash">
+        <div class="stat brandcard">
+          <div class="spark"></div>
+          <div class="label">Total gasto no mês</div>
+          <div class="value live" id="spendTotal">R$ 0,00</div>
+          <div class="meta" id="spendTotalMeta">Nenhum gasto lançado</div>
+          <button class="btn ghost sm" id="spendTodayBtn" style="margin-top:12px">Mês atual</button>
+        </div>
+      </section>
+
+      <div class="method-summary" id="methodSummary"></div>
+
+      <div class="section-head">
+        <h2>Extratos & comprovantes</h2>
+        <span class="count" id="docCount">0</span>
+      </div>
+      <div class="doc-strip" id="docStrip"></div>
+      <label class="doc-add" for="docInput">
+        <span class="doc-add-ico">＋</span>
+        <span>Enviar extrato ou comprovante do mês</span>
+      </label>
+      <input type="file" id="docInput" accept="image/*,application/pdf" multiple hidden>
+
+      <div class="section-head" style="margin-top:22px">
+        <h2>Lançamentos</h2>
+        <span class="count" id="spendCount">0</span>
+      </div>
+      <div class="cards" id="spendList"></div>
+    </section>
+
     <!-- ===== SETTINGS TAB ===== -->
     <section class="tab-panel" id="tab-settings" data-tab="settings" hidden>
       <header class="top">
@@ -199,6 +244,10 @@
     <button class="tab-btn active" data-tab="home">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11.5 12 4l9 7.5"/><path d="M5 10v9a1 1 0 0 0 1 1h5v-6h2v6h5a1 1 0 0 0 1-1v-9"/></svg>
       <span>Início</span>
+    </button>
+    <button class="tab-btn" data-tab="spending">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 7h18v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/><path d="M3 7l2-3h14l2 3"/><path d="M8 11h.01M12 11h4"/></svg>
+      <span>Gastos</span>
     </button>
     <button class="tab-btn" data-tab="calendar">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>
@@ -318,6 +367,65 @@
         <button class="btn primary" id="dayCloseBtn">Fechar</button>
       </div>
     </div>
+  </div>
+
+  <!-- Sheet: novo/editar gasto -->
+  <div class="backdrop" id="spendBackdrop">
+    <div class="sheet" id="spendSheet" role="dialog" aria-modal="true">
+      <div class="grip"></div>
+      <h2 id="spendSheetTitle">Novo gasto</h2>
+
+      <div class="field">
+        <label for="sName">O que foi?</label>
+        <input class="input" id="sName" type="text" placeholder="Ex.: Gasolina, Açaí, Salgado..." autocomplete="off">
+        <div class="hint err" id="esName" hidden>Informe o que foi.</div>
+      </div>
+
+      <div class="field-row">
+        <div class="field">
+          <label for="sAmount">Valor (R$)</label>
+          <input class="input" id="sAmount" type="text" inputmode="decimal" placeholder="0,00">
+          <div class="hint err" id="esAmount" hidden>Valor inválido.</div>
+        </div>
+        <div class="field">
+          <label for="sDate">Data</label>
+          <input class="input" id="sDate" type="date">
+        </div>
+      </div>
+
+      <div class="field">
+        <label>Como pagou?</label>
+        <div class="seg pay-seg" id="paySeg"></div>
+      </div>
+
+      <div class="field">
+        <label for="sNote">Observação (opcional)</label>
+        <input class="input" id="sNote" type="text" placeholder="Anotação rápida..." autocomplete="off">
+      </div>
+
+      <div class="field">
+        <label>Comprovante (opcional)</label>
+        <div class="att-strip" id="attStrip"></div>
+        <label class="doc-add sm" for="attInput">
+          <span class="doc-add-ico">＋</span>
+          <span>Anexar foto ou PDF</span>
+        </label>
+        <input type="file" id="attInput" accept="image/*,application/pdf" multiple hidden>
+      </div>
+
+      <button class="btn block danger" id="spendDeleteBtn" hidden>Excluir gasto</button>
+
+      <div class="sheet-actions">
+        <button class="btn" id="spendCancelBtn">Cancelar</button>
+        <button class="btn primary" id="spendSaveBtn">Salvar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Visualizador de comprovante -->
+  <div class="viewer" id="viewer">
+    <button class="viewer-close" id="viewerClose" aria-label="Fechar">✕</button>
+    <img id="viewerImg" alt="Comprovante">
   </div>
 
   <div class="toast" id="toast"></div>
