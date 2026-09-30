@@ -1,6 +1,13 @@
 'use strict';
-var CACHE = 'parcelas-v9';
-var ASSETS = ['./', './index.html', './styles.css', './app.js', './manifest.webmanifest'];
+var CACHE = 'parcelas-v10';
+var ASSETS = [
+  './',
+  './index.html',
+  './manifest.webmanifest',
+  './assets/css/styles.css',
+  './assets/js/app.js',
+  './assets/icons/icon.svg'
+];
 
 self.addEventListener('install', function (ev) {
   self.skipWaiting();
