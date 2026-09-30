@@ -1457,7 +1457,112 @@
     if (dayBackdrop.classList.contains('open')) closeDaySheet();
     if (spendBackdrop.classList.contains('open')) closeSpendSheet();
     if (viewer.classList.contains('open')) closeViewer();
+    if (dataBackdrop && dataBackdrop.classList.contains('open')) closeDataSheet();
+    if (pinBackdrop && pinBackdrop.classList.contains('open')) closePin();
   });
+
+  // physical keyboard support for the PIN pad
+  document.addEventListener('keydown', function (ev) {
+    if (!pinBackdrop || !pinBackdrop.classList.contains('open')) return;
+    if (ev.key >= '0' && ev.key <= '9') { ev.preventDefault(); pinPush(ev.key); }
+    else if (ev.key === 'Backspace') { ev.preventDefault(); pinDel(); }
+  });
+
+  // ---- backup & segurança sheet ----
+  var dataBackdrop = document.getElementById('dataBackdrop');
+  function openDataSheet() { dataBackdrop.classList.add('open'); document.body.style.overflow = 'hidden'; }
+  function closeDataSheet() { dataBackdrop.classList.remove('open'); document.body.style.overflow = ''; }
+  var dataCloseBtn = document.getElementById('dataCloseBtn');
+  if (dataCloseBtn) dataCloseBtn.onclick = closeDataSheet;
+  if (dataBackdrop) dataBackdrop.addEventListener('click', function (ev) { if (ev.target === dataBackdrop) closeDataSheet(); });
+
+  // ---- PIN gate (local privacy lock — not cryptographic security) ----
+  var PIN_KEY = 'pt_pin_v1';
+  var pinBackdrop = document.getElementById('pinBackdrop');
+  var pinSheet = document.getElementById('pinSheet');
+  var pinTitle = document.getElementById('pinTitle');
+  var pinSub = document.getElementById('pinSub');
+  var pinDots = document.getElementById('pinDots');
+  var pinErr = document.getElementById('pinErr');
+  var pinPad = document.getElementById('pinPad');
+
+  function hashPin(s) { var h = 5381; for (var i = 0; i < s.length; i++) { h = (((h << 5) + h) ^ s.charCodeAt(i)) >>> 0; } return h.toString(36); }
+  function getStoredPin() { try { return localStorage.getItem(PIN_KEY); } catch (e) { return null; } }
+  function storePin(v) { try { localStorage.setItem(PIN_KEY, v); } catch (e) {} }
+
+  var pinState = { mode: 'enter', buf: '', temp: '', onOk: null };
+  var PIN_TITLES = { enter: 'Digite seu PIN', create: 'Crie um PIN', confirm: 'Confirme o PIN', 'change-verify': 'PIN atual', 'change-new': 'Novo PIN', 'change-confirm': 'Confirme o novo PIN' };
+  var PIN_SUBS = { enter: 'Para acessar seus dados', create: 'Escolha um código de 4 dígitos', confirm: 'Digite novamente para confirmar', 'change-verify': 'Confirme sua identidade', 'change-new': 'Escolha um novo código', 'change-confirm': 'Digite novamente para confirmar' };
+
+  function renderPin() {
+    pinErr.hidden = true;
+    pinTitle.textContent = PIN_TITLES[pinState.mode];
+    pinSub.textContent = PIN_SUBS[pinState.mode];
+    updatePinDots();
+  }
+  function updatePinDots() {
+    var dots = pinDots.children;
+    for (var i = 0; i < dots.length; i++) dots[i].classList.toggle('on', i < pinState.buf.length);
+  }
+  function showPinErr(msg) {
+    pinErr.textContent = msg; pinErr.hidden = false;
+    pinSheet.classList.remove('shake'); void pinSheet.offsetWidth; pinSheet.classList.add('shake');
+  }
+  function openPin(purpose) {
+    pinState.buf = ''; pinState.temp = '';
+    if (purpose === 'change') {
+      pinState.mode = getStoredPin() ? 'change-verify' : 'create';
+      pinState.onOk = function () { showToast('PIN definido'); };
+    } else {
+      pinState.mode = getStoredPin() ? 'enter' : 'create';
+      pinState.onOk = openDataSheet;
+    }
+    renderPin();
+    pinBackdrop.classList.add('open'); document.body.style.overflow = 'hidden';
+  }
+  function closePin() { pinBackdrop.classList.remove('open'); document.body.style.overflow = ''; }
+
+  function pinPush(d) {
+    if (pinState.buf.length >= 4) return;
+    pinState.buf += d; updatePinDots();
+    if (pinState.buf.length === 4) setTimeout(pinComplete, 130);
+  }
+  function pinDel() { if (pinState.buf.length) { pinState.buf = pinState.buf.slice(0, -1); updatePinDots(); } }
+
+  function pinComplete() {
+    var v = pinState.buf, m = pinState.mode;
+    if (m === 'enter') {
+      if (hashPin(v) === getStoredPin()) { closePin(); if (pinState.onOk) pinState.onOk(); }
+      else { pinState.buf = ''; updatePinDots(); showPinErr('PIN incorreto'); }
+    } else if (m === 'create') {
+      pinState.temp = v; pinState.buf = ''; pinState.mode = 'confirm'; renderPin();
+    } else if (m === 'confirm') {
+      if (v === pinState.temp) { storePin(hashPin(v)); closePin(); if (pinState.onOk) pinState.onOk(); }
+      else { pinState.buf = ''; pinState.temp = ''; pinState.mode = 'create'; renderPin(); showPinErr('Os PINs não coincidem'); }
+    } else if (m === 'change-verify') {
+      if (hashPin(v) === getStoredPin()) { pinState.buf = ''; pinState.mode = 'change-new'; renderPin(); }
+      else { pinState.buf = ''; updatePinDots(); showPinErr('PIN incorreto'); }
+    } else if (m === 'change-new') {
+      pinState.temp = v; pinState.buf = ''; pinState.mode = 'change-confirm'; renderPin();
+    } else if (m === 'change-confirm') {
+      if (v === pinState.temp) { storePin(hashPin(v)); closePin(); showToast('PIN alterado'); }
+      else { pinState.buf = ''; pinState.temp = ''; pinState.mode = 'change-new'; renderPin(); showPinErr('Os PINs não coincidem'); }
+    }
+  }
+
+  if (pinPad) pinPad.addEventListener('click', function (ev) {
+    var b = ev.target.closest('.pin-key'); if (!b) return;
+    var k = b.getAttribute('data-k');
+    if (k === 'del') pinDel();
+    else if (k === 'cancel') closePin();
+    else pinPush(k);
+  });
+  if (pinBackdrop) pinBackdrop.addEventListener('click', function (ev) { if (ev.target === pinBackdrop) closePin(); });
+
+  var openDataBtn = document.getElementById('openDataBtn');
+  if (openDataBtn) openDataBtn.onclick = function () { openPin('unlock'); };
+  var changePinBtn = document.getElementById('changePinBtn');
+  if (changePinBtn) changePinBtn.onclick = function () { closeDataSheet(); openPin('change'); };
 
   // today label
   (function () {

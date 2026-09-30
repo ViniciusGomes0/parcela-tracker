@@ -191,33 +191,10 @@
       </div>
 
       <div class="settings-group">
-        <div class="settings-label">Seus dados</div>
-        <p class="storage-note" id="storageStatus">Verificando armazenamento…</p>
-        <button class="settings-row action" id="exportDbBtn">
-          <span class="ico">💾</span>
-          <span class="txt"><b>Baixar banco (.sqlite)</b><small>Arquivo do banco SQLite completo</small></span>
-          <span class="chev">›</span>
-        </button>
-        <label class="settings-row action" for="importDbFile">
-          <span class="ico">📥</span>
-          <span class="txt"><b>Restaurar banco (.sqlite)</b><small>Carrega um arquivo .sqlite salvo antes</small></span>
-          <span class="chev">›</span>
-        </label>
-        <input type="file" id="importDbFile" accept=".sqlite,.db,application/x-sqlite3" hidden>
-        <button class="settings-row action" id="exportBtn">
-          <span class="ico">⬇️</span>
-          <span class="txt"><b>Exportar backup (.json)</b><small>Formato leve e legível, sempre funciona</small></span>
-          <span class="chev">›</span>
-        </button>
-        <label class="settings-row action" for="importFile">
-          <span class="ico">⬆️</span>
-          <span class="txt"><b>Importar backup (.json)</b><small>Restaura a partir de um arquivo .json</small></span>
-          <span class="chev">›</span>
-        </label>
-        <input type="file" id="importFile" accept=".json,application/json" hidden>
-        <button class="settings-row action danger" id="wipeBtn">
-          <span class="ico">🗑️</span>
-          <span class="txt"><b>Apagar tudo</b><small>Remove todas as compras cadastradas</small></span>
+        <div class="settings-label">Privacidade</div>
+        <button class="settings-row action" id="openDataBtn">
+          <span class="ico">🔒</span>
+          <span class="txt"><b>Backup e segurança</b><small>Salvar, restaurar ou apagar seus dados</small></span>
           <span class="chev">›</span>
         </button>
       </div>
@@ -228,7 +205,7 @@
           <div class="about-ico">R$</div>
           <div>
             <b>Financeiro</b>
-            <p>Controle simples e privado das suas compras parceladas. Seus dados ficam num banco SQLite somente neste dispositivo.</p>
+            <p>Controle simples e privado das suas compras parceladas. Seus dados ficam guardados somente neste dispositivo.</p>
           </div>
         </div>
         <p class="credit">By Vinicius Gomes de Oliveira · 2026</p>
@@ -376,6 +353,85 @@
 
       <div class="sheet-actions">
         <button class="btn primary" id="dayCloseBtn">Fechar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sheet: PIN de acesso -->
+  <div class="backdrop" id="pinBackdrop">
+    <div class="sheet pin-sheet" id="pinSheet" role="dialog" aria-modal="true">
+      <div class="grip"></div>
+      <div class="pin-lock">🔒</div>
+      <h2 id="pinTitle">Digite seu PIN</h2>
+      <p class="sheet-sub pin-sub" id="pinSub">Para acessar seus dados</p>
+      <div class="pin-dots" id="pinDots"><span></span><span></span><span></span><span></span></div>
+      <div class="pin-err" id="pinErr" hidden>PIN incorreto</div>
+      <div class="pin-pad" id="pinPad">
+        <button type="button" class="pin-key" data-k="1">1</button>
+        <button type="button" class="pin-key" data-k="2">2</button>
+        <button type="button" class="pin-key" data-k="3">3</button>
+        <button type="button" class="pin-key" data-k="4">4</button>
+        <button type="button" class="pin-key" data-k="5">5</button>
+        <button type="button" class="pin-key" data-k="6">6</button>
+        <button type="button" class="pin-key" data-k="7">7</button>
+        <button type="button" class="pin-key" data-k="8">8</button>
+        <button type="button" class="pin-key" data-k="9">9</button>
+        <button type="button" class="pin-key ghost" data-k="cancel">Cancelar</button>
+        <button type="button" class="pin-key" data-k="0">0</button>
+        <button type="button" class="pin-key ghost" data-k="del">⌫</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Sheet: backup e segurança -->
+  <div class="backdrop" id="dataBackdrop">
+    <div class="sheet" id="dataSheet" role="dialog" aria-modal="true">
+      <div class="grip"></div>
+      <h2>Backup e segurança</h2>
+      <p class="sheet-sub">Seus dados ficam apenas neste aparelho. Guarde uma cópia de segurança para não perder nada ao trocar de celular.</p>
+
+      <div class="settings-label">Cópia de segurança</div>
+      <button class="settings-row action" id="exportDbBtn">
+        <span class="ico">💾</span>
+        <span class="txt"><b>Salvar cópia completa</b><small>Guarda tudo em um único arquivo</small></span>
+        <span class="chev">›</span>
+      </button>
+      <label class="settings-row action" for="importDbFile">
+        <span class="ico">📥</span>
+        <span class="txt"><b>Restaurar cópia</b><small>Carrega uma cópia salva antes</small></span>
+        <span class="chev">›</span>
+      </label>
+      <input type="file" id="importDbFile" accept=".sqlite,.db,application/x-sqlite3" hidden>
+
+      <div class="settings-label" style="margin-top:18px">Exportar em texto</div>
+      <button class="settings-row action" id="exportBtn">
+        <span class="ico">⬇️</span>
+        <span class="txt"><b>Exportar (.json)</b><small>Formato leve e legível, sempre funciona</small></span>
+        <span class="chev">›</span>
+      </button>
+      <label class="settings-row action" for="importFile">
+        <span class="ico">⬆️</span>
+        <span class="txt"><b>Importar (.json)</b><small>Restaura a partir de um arquivo .json</small></span>
+        <span class="chev">›</span>
+      </label>
+      <input type="file" id="importFile" accept=".json,application/json" hidden>
+
+      <div class="settings-label" style="margin-top:18px">Segurança</div>
+      <button class="settings-row action" id="changePinBtn">
+        <span class="ico">🔑</span>
+        <span class="txt"><b>Alterar PIN</b><small>Troca o código de acesso a esta área</small></span>
+        <span class="chev">›</span>
+      </button>
+
+      <div class="settings-label" style="margin-top:18px">Zona de risco</div>
+      <button class="settings-row action danger" id="wipeBtn">
+        <span class="ico">🗑️</span>
+        <span class="txt"><b>Apagar tudo</b><small>Remove todas as compras cadastradas</small></span>
+        <span class="chev">›</span>
+      </button>
+
+      <div class="sheet-actions">
+        <button class="btn primary" id="dataCloseBtn">Fechar</button>
       </div>
     </div>
   </div>

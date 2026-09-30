@@ -433,6 +433,47 @@ header.top .sub { color: var(--text-3); font-size: 13px; margin-top: 6px; font-w
 .about-card p { margin: 4px 0 0; font-size: 12.5px; color: var(--text-3); line-height: 1.5; }
 .credit { margin: 14px 0 4px; text-align: center; font-size: 12px; color: var(--text-3); letter-spacing: .2px; }
 
+/* Backup & segurança sheet */
+.sheet-sub {
+  margin: -4px 0 18px; font-size: 13px; line-height: 1.5; color: var(--text-3); font-weight: 500;
+}
+#dataSheet .settings-label { margin: 0 2px 8px; }
+#dataSheet .settings-row { border-radius: var(--radius-sm); margin-bottom: 8px; }
+#dataSheet .sheet-actions { margin-top: 20px; }
+
+/* PIN gate */
+.pin-sheet { text-align: center; }
+.pin-lock {
+  width: 54px; height: 54px; margin: 4px auto 10px; border-radius: 16px;
+  display: flex; align-items: center; justify-content: center; font-size: 24px;
+  background: linear-gradient(135deg, var(--brand), var(--accent)); box-shadow: var(--shadow);
+}
+.pin-sheet h2 { text-align: center; }
+.pin-sub { text-align: center; margin: -2px 0 18px; }
+.pin-dots { display: flex; justify-content: center; gap: 16px; margin: 4px 0 14px; }
+.pin-dots span {
+  width: 14px; height: 14px; border-radius: 50%;
+  background: var(--surface-2); border: 2px solid var(--border); transition: all .15s ease;
+}
+.pin-dots span.on { background: var(--brand); border-color: var(--brand); transform: scale(1.05); }
+.pin-err { color: var(--danger); font-size: 13px; font-weight: 600; margin: 0 0 12px; min-height: 16px; }
+.pin-pad {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; max-width: 300px; margin: 4px auto 6px;
+}
+.pin-key {
+  height: 60px; border-radius: 16px; font-size: 24px; font-weight: 600; color: var(--text);
+  background: var(--surface-2); border: 1px solid var(--border); transition: background .12s ease, transform .08s ease;
+}
+.pin-key:active { background: var(--border); transform: scale(.96); }
+.pin-key.ghost { font-size: 15px; font-weight: 600; color: var(--text-3); background: transparent; border-color: transparent; }
+.pin-key.ghost:active { background: var(--surface-2); }
+@keyframes pinShake {
+  0%,100% { transform: translateX(0); }
+  20%,60% { transform: translateX(-9px); }
+  40%,80% { transform: translateX(9px); }
+}
+.pin-sheet.shake { animation: pinShake .4s ease; }
+
 /* Category picker in form */
 .cat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
 .cat-opt {
